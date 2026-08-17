@@ -50,6 +50,7 @@ export default function Register() {
   return (
     <div className="auth-page">
       <div className="auth-card wide">
+        <Link to="/" className="back-home"><span aria-hidden="true">←</span> Back to home</Link>
         <div className="brand-side"><span className="logo-dot" /> PeerLink</div>
         <h1>Create your account</h1>
         <p className="muted">Join as a student needing help — or as a tutor ready to teach.</p>

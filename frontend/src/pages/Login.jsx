@@ -25,6 +25,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <Link to="/" className="back-home"><span aria-hidden="true">←</span> Back to home</Link>
         <div className="brand-side"><span className="logo-dot" /> PeerLink</div>
         <h1>Log in</h1>
         <p className="muted">Welcome back — continue your tutoring journey.</p>
