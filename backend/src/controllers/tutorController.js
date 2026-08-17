@@ -16,46 +16,44 @@ const getMyProfile = asyncHandler(async (req, res) => {
 
 /** PUT /api/tutors/me — update profile fields. */
 const updateMyProfile = asyncHandler(async (req, res) => {
-  const { course, max_year_level, bio, availability } = req.body;
+  const {
+    course, max_year_level, bio, availability, tags, age, grade_level, school, strand,
+    subjects_teach, learning_mode, preferred_schedule, preferred_time
+  } = req.body;
+  req.body.strand = req.body.strand === 'JHS (Grade 7-10)' ? 'JHS' : req.body.strand;
   validate({
     course: [v.maxLen(150)],
     max_year_level: [v.intRange(1, 10, 'max year level')],
     bio: [v.maxLen(2000)],
-    availability: [v.object('weekly availability')]
+    availability: [v.object('weekly availability')],
+    age: [v.intRange(10, 100, 'age')],
+    grade_level: [v.maxLen(50)],
+    school: [v.maxLen(150)],
+    strand: [v.isIn(['STEM', 'GAS', 'ICT', 'ABM', 'HUMSS', 'JHS'])],
+    learning_mode: [v.isIn(['online', 'face-to-face', 'both'])],
+    preferred_time: [v.maxLen(60)]
   }, req.body);
+  if (tags !== undefined) {
+    if (!Array.isArray(tags) || tags.length > 12) {
+      throw new ApiError(400, 'Validation failed', ['tags: must be an array of at most 12 tags']);
+    }
+    for (const tag of tags) {
+      if (typeof tag !== 'string' || !tag.trim() || tag.trim().length > 30) {
+        throw new ApiError(400, 'Validation failed', ['tags: each tag must be a non-empty string of at most 30 characters']);
+      }
+    }
+  }
   const profile = await tutorModel.findProfileByUserId(req.user.id);
   if (!profile) throw new ApiError(404, 'Tutor profile not found');
-  await tutorModel.updateProfile(req.user.id, { course, max_year_level, bio, availability });
+  await tutorModel.updateProfile(req.user.id, {
+    course, max_year_level, bio, availability, tags, age, grade_level, school, strand,
+    subjects_teach, learning_mode, preferred_schedule, preferred_time
+  });
   log(req, 'tutor.profile_update', 'tutor_profile', profile.id);
   const updated = await tutorModel.getProfileWithSubjects(req.user.id);
   const ratings = await evaluationModel.ratingSummaryByTutor();
   const mine = ratings.find((r) => r.user_id === req.user.id) || { avg_rating: 0, rating_count: 0 };
   ok(res, 200, { ...updated, ...mine }, 'Profile updated');
-});
-
-/** PUT /api/tutors/me/subjects — replace subjects taught (with proficiency 1-5). */
-const setMySubjects = asyncHandler(async (req, res) => {
-  const { subjects } = req.body;
-  if (!Array.isArray(subjects) || subjects.length === 0) {
-    throw new ApiError(400, 'Validation failed', ['subjects: must be a non-empty array of { subject_id, proficiency }']);
-  }
-  const items = [];
-  for (const item of subjects) {
-    const sid = Number(item.subject_id);
-    const prof = Number(item.proficiency || 3);
-    if (!Number.isInteger(sid) || !(await subjectModel.findById(sid))) {
-      throw new ApiError(400, 'Validation failed', [`subjects: subject_id ${item.subject_id} is not a known subject`]);
-    }
-    if (!Number.isInteger(prof) || prof < 1 || prof > 5) {
-      throw new ApiError(400, 'Validation failed', ['subjects: proficiency must be an integer between 1 and 5']);
-    }
-    items.push({ subject_id: sid, proficiency: prof });
-  }
-  const profile = await tutorModel.findProfileByUserId(req.user.id);
-  if (!profile) throw new ApiError(404, 'Tutor profile not found');
-  await tutorModel.replaceSubjects(profile.id, items);
-  log(req, 'tutor.subjects_update', 'tutor_profile', profile.id);
-  ok(res, 200, await tutorModel.getProfileWithSubjects(req.user.id), 'Subjects updated');
 });
 
 /** GET /api/tutors/me/subjects */
@@ -65,32 +63,23 @@ const getMySubjects = asyncHandler(async (req, res) => {
   ok(res, 200, profile.subjects);
 });
 
-/** POST /api/tutors/me/subjects — tutor creates their own subject and adds it to their profile. */
-const addMySubject = asyncHandler(async (req, res) => {
-  const { code, name, description, proficiency } = req.body;
-  validate({
-    code: [v.required('code'), v.maxLen(20)],
-    name: [v.required('name'), v.maxLen(150)],
-    description: [v.maxLen(500)],
-    proficiency: [v.intRange(1, 5, 'proficiency')]
-  }, req.body);
+/** PUT /api/tutors/me/subjects — replace the subjects a tutor teaches. */
+const setMySubjects = asyncHandler(async (req, res) => {
+  const { subjects } = req.body;
+  if (!Array.isArray(subjects) || subjects.length === 0) {
+    throw new ApiError(400, 'Validation failed', ['subjects: must be a non-empty array of subjects']);
+  }
+  const items = subjects.map((s) => (typeof s === 'object' ? { subject_id: Number(s.subject_id), proficiency: Number(s.proficiency) || 3 } : { subject_id: Number(s), proficiency: 3 }));
+  const unique = [...new Map(items.map((s) => [s.subject_id, s])).values()];
+  for (const item of unique) {
+    if (!Number.isInteger(item.subject_id)) throw new ApiError(400, 'Validation failed', ['subjects: all subject ids must be integers']);
+    if (!(await subjectModel.findById(item.subject_id))) throw new ApiError(400, `Subject id ${item.subject_id} does not exist`);
+  }
   const profile = await tutorModel.findProfileByUserId(req.user.id);
   if (!profile) throw new ApiError(404, 'Tutor profile not found');
-  let subject = await subjectModel.findByCode(code.trim().toUpperCase());
-  let created = false;
-  if (!subject) {
-    subject = await subjectModel.create({ code: code.trim().toUpperCase(), name: name.trim(), description });
-    created = true;
-    log(req, 'subject.create', 'subject', subject.id);
-  }
-  await tutorModel.addSubjectToProfile(profile.id, subject.id, proficiency || 3);
-  log(req, 'tutor.subject_add', 'tutor_profile', profile.id);
-  ok(res, created ? 201 : 200, {
-    subject,
-    profile: await tutorModel.getProfileWithSubjects(req.user.id)
-  }, created
-    ? `Subject ${subject.name} created and added to your profile`
-    : `${subject.name} already exists — added to your profile`);
+  await tutorModel.replaceSubjects(profile.id, unique);
+  log(req, 'tutor.subjects_update', 'tutor_profile', profile.id, { subject_ids: unique.map((s) => s.subject_id) });
+  ok(res, 200, await tutorModel.getProfileWithSubjects(req.user.id), 'Subjects updated');
 });
 
 /** GET /api/tutors/:id — public tutor profile view. */
@@ -102,4 +91,4 @@ const getPublicTutor = asyncHandler(async (req, res) => {
   ok(res, 200, { ...tutor, avg_rating: mine.avg_rating, rating_count: mine.rating_count });
 });
 
-module.exports = { getMyProfile, updateMyProfile, setMySubjects, getMySubjects, addMySubject, getPublicTutor };
+module.exports = { getMyProfile, updateMyProfile, getMySubjects, setMySubjects, getPublicTutor };

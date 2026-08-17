@@ -11,30 +11,36 @@ async function findProfileByUserId(userId) {
   return rows[0] || null;
 }
 
-async function createProfile({ userId, course, max_year_level, bio, availability }, conn) {
-  const values = [userId, course || null, max_year_level || 5, bio || null, availability ? JSON.stringify(availability) : null];
+async function createProfile({ userId, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, subjects_teach, learning_mode, preferred_schedule, preferred_time }, conn) {
+  const values = [
+    userId, course || null, max_year_level || 5, bio || null,
+    availability ? JSON.stringify(availability) : null,
+    tags && Array.isArray(tags) ? JSON.stringify(tags) : null,
+    age || null, grade_level || null, school || null, strand || null,
+    subjects_teach ? JSON.stringify(subjects_teach) : null,
+    learning_mode || null,
+    preferred_schedule ? JSON.stringify(preferred_schedule) : null,
+    preferred_time || null
+  ];
+  const sql = 'INSERT INTO tutor_profiles (user_id, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, subjects_teach, learning_mode, preferred_schedule, preferred_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   if (conn) {
-    return (await qex(
-      conn,
-      'INSERT INTO tutor_profiles (user_id, course, max_year_level, bio, availability) VALUES (?, ?, ?, ?, ?)',
-      values
-    )).insertId;
+    return (await qex(conn, sql, values)).insertId;
   }
-  const result = await query(
-    'INSERT INTO tutor_profiles (user_id, course, max_year_level, bio, availability) VALUES (?, ?, ?, ?, ?)',
-    values
-  );
+  const result = await query(sql, values);
   return result.insertId;
 }
 
 async function updateProfile(userId, fields) {
-  const allowed = ['course', 'max_year_level', 'bio', 'availability'];
+  const allowed = [
+    'course', 'max_year_level', 'bio', 'availability', 'tags', 'age', 'grade_level', 'school', 'strand',
+    'subjects_teach', 'learning_mode', 'preferred_schedule', 'preferred_time'
+  ];
   const sets = [];
   const params = [];
   for (const f of allowed) {
     if (fields[f] !== undefined) {
       sets.push(`${f} = ?`);
-      params.push(f === 'availability' ? JSON.stringify(fields[f]) : fields[f]);
+      params.push(Array.isArray(fields[f]) ? JSON.stringify(fields[f]) : fields[f]);
     }
   }
   if (!sets.length) return;
@@ -77,7 +83,6 @@ async function getPublicTutor(id) {
      WHERE ts.tutor_profile_id = ?`,
     [profile.id]
   );
-  delete profile.user_id;
   return { ...profile, subjects };
 }
 
@@ -124,7 +129,7 @@ async function ensureProfile(userId, data, conn) {
 async function getAllTutors() {
   return query(
     `SELECT tp.id AS tutor_profile_id, tp.user_id, tp.course, tp.max_year_level,
-            tp.availability, u.first_name, u.last_name, u.email
+            tp.availability, tp.tags, tp.learning_mode, u.first_name, u.last_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
      WHERE u.is_active = TRUE`

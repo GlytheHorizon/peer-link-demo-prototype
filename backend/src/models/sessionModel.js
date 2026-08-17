@@ -4,12 +4,14 @@ const SESSION_SELECT = `
   SELECT s.*, sub.code AS subject_code, sub.name AS subject_name,
          CONCAT(stu.first_name, ' ', stu.last_name) AS student_name, stu.email AS student_email,
          CONCAT(tut.first_name, ' ', tut.last_name) AS tutor_name, tut.email AS tutor_email,
-         e.id AS evaluation_id, e.rating AS evaluation_rating
+         e.id AS evaluation_id, e.rating AS evaluation_rating,
+         p.id AS payment_id, p.method AS payment_method, p.amount AS payment_amount, p.created_at AS paid_at
   FROM sessions s
   JOIN subjects sub ON sub.id = s.subject_id
   JOIN users stu ON stu.id = s.student_id
   JOIN users tut ON tut.id = s.tutor_id
-  LEFT JOIN evaluations e ON e.session_id = s.id`;
+  LEFT JOIN evaluations e ON e.session_id = s.id
+  LEFT JOIN payments p ON p.session_id = s.id`;
 
 async function findById(id) {
   const rows = await query(`${SESSION_SELECT} WHERE s.id = ?`, [id]);
@@ -41,6 +43,10 @@ async function listForTutor(tutorId) {
 
 async function updateStatus(id, status) {
   await query('UPDATE sessions SET status = ? WHERE id = ?', [status, id]);
+}
+
+async function updateSchedule(id, scheduledStart, scheduledEnd) {
+  await query('UPDATE sessions SET scheduled_start = ?, scheduled_end = ? WHERE id = ?', [scheduledStart, scheduledEnd, id]);
 }
 
 /** True when a session overlaps another active session of the same user within a status scope. */
@@ -78,4 +84,4 @@ async function countBetween(start, end) {
   return rows[0].total;
 }
 
-module.exports = { findById, create, listForStudent, listForTutor, updateStatus, hasOverlap, countByStatus, countBetween };
+module.exports = { findById, create, listForStudent, listForTutor, updateStatus, updateSchedule, hasOverlap, countByStatus, countBetween };

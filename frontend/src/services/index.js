@@ -24,8 +24,9 @@ export const tutorService = {
   getMe: () => apiFetch('/tutors/me'),
   updateMe: (payload) => apiFetch('/tutors/me', { method: 'PUT', body: payload }),
   getSubjects: () => apiFetch('/tutors/me/subjects'),
-  setSubjects: (subjects) => apiFetch('/tutors/me/subjects', { method: 'PUT', body: { subjects } }),
-  addSubject: (payload) => apiFetch('/tutors/me/subjects', { method: 'POST', body: payload }),
+  setSubjects: (payload) => apiFetch('/tutors/me/subjects', { method: 'PUT', body: payload }),
+  addSubjectRequest: (payload) => apiFetch('/tutors/me/subject-requests', { method: 'POST', body: payload }),
+  listSubjectRequests: () => apiFetch('/tutors/me/subject-requests'),
   getPublic: (id) => apiFetch(`/tutors/${id}`)
 };
 
@@ -49,7 +50,11 @@ export const conversationService = {
   getMessages: (id) => apiFetch(`/conversations/${id}/messages`),
   sendMessage: (id, body) => apiFetch(`/conversations/${id}/messages`, { method: 'POST', body: { body } }),
   deleteMessage: (id, messageId) => apiFetch(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' }),
-  unreadCount: () => apiFetch('/conversations/unread-count')
+  unreadCount: () => apiFetch('/conversations/unread-count'),
+  payments: (id) => apiFetch(`/conversations/${id}/payments`),
+  pay: (id, payload) => apiFetch(`/conversations/${id}/payments`, { method: 'POST', body: payload }),
+  acceptPayment: (id, paymentId) => apiFetch(`/conversations/${id}/payments/${paymentId}/accept`, { method: 'POST', body: {} }),
+  rejectPayment: (id, paymentId, reason) => apiFetch(`/conversations/${id}/payments/${paymentId}/reject`, { method: 'POST', body: { reason } })
 };
 
 export const sessionService = {
@@ -58,7 +63,8 @@ export const sessionService = {
   create: (payload) => apiFetch('/sessions', { method: 'POST', body: payload }),
   respond: (id, decision) => apiFetch(`/sessions/${id}/respond`, { method: 'PATCH', body: { decision } }),
   complete: (id) => apiFetch(`/sessions/${id}/complete`, { method: 'PATCH', body: {} }),
-  cancel: (id) => apiFetch(`/sessions/${id}/cancel`, { method: 'PATCH', body: {} })
+  cancel: (id) => apiFetch(`/sessions/${id}/cancel`, { method: 'PATCH', body: {} }),
+  pay: (id, payload) => apiFetch(`/sessions/${id}/pay`, { method: 'POST', body: payload })
 };
 
 export const evaluationService = {
@@ -80,7 +86,10 @@ export const adminService = {
   listSessions: (params = {}) => {
     const qs = toQuery(params);
     return apiFetch(`/admin/sessions${qs ? `?${qs}` : ''}`);
-  }
+  },
+  listSubjectRequests: () => apiFetch('/admin/subject-requests'),
+  approveSubjectRequest: (id) => apiFetch(`/admin/subject-requests/${id}/approve`, { method: 'POST', body: {} }),
+  rejectSubjectRequest: (id) => apiFetch(`/admin/subject-requests/${id}/reject`, { method: 'POST', body: {} })
 };
 
 export const reportService = {

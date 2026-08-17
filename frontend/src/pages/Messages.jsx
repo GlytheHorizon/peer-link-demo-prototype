@@ -6,6 +6,165 @@ import { useConfirm } from '../context/ConfirmContext';
 import { conversationService } from '../services';
 import { Spinner, Alert, formatDateTime, EmptyState } from '../components/ui';
 
+/** Payment / clearance box shown above the composer. */
+function PaymentBox({ conversationId, conv, user }) {
+  const confirm = useConfirm();
+  const isTutor = conv.tutor_id === user.id;
+  const [payments, setPayments] = useState([]);
+  const [err, setErr] = useState(null);
+  const [paying, setPaying] = useState(false);
+  const [form, setForm] = useState({ amount: '', reference: '' });
+  const [busy, setBusy] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+
+  const load = async () => {
+    const res = await conversationService.payments(conversationId);
+    if (res.ok) setPayments(res.data);
+    else setErr(res.message);
+  };
+
+  useEffect(() => { load(); }, [conversationId]);
+
+  const latest = payments[0] || null;
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    const res = await conversationService.pay(conversationId, {
+      amount: form.amount,
+      reference: form.reference
+    });
+    setBusy(false);
+    if (res.ok) {
+      setForm({ amount: '', reference: '' });
+      setPaying(false);
+      load();
+    } else setErr(res.message);
+  };
+
+  const accept = async () => {
+    const ok = await confirm({
+      title: 'Confirm payment?',
+      message: `Clear this payment${latest.amount ? ` of ₱${latest.amount}` : ''}?`,
+      confirmText: 'Accept payment'
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await conversationService.acceptPayment(conversationId, latest.id);
+    setBusy(false);
+    if (res.ok) load();
+    else setErr(res.message);
+  };
+
+  const reject = async () => {
+    const ok = await confirm({
+      title: 'Reject payment?',
+      message: 'Rejecting lets the student send a new payment.',
+      confirmText: 'Reject',
+      danger: true
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await conversationService.rejectPayment(conversationId, latest.id, reason);
+    setBusy(false);
+    if (res.ok) { setRejecting(false); setReason(''); load(); }
+    else setErr(res.message);
+  };
+
+  const summary = (p) => (
+    <span className="muted small">
+      {p.amount ? <>₱{p.amount} · </> : null}{p.reference ? `${p.reference} · ` : ''}{formatDateTime(p.created_at)}
+    </span>
+  );
+
+  let body;
+  if (!latest || latest.status === 'rejected') {
+    body = (
+      <>
+        <div className="payment-head">
+          <b>{latest ? 'Payment rejected' : 'Send payment for clearance'}</b>
+          {latest && <span className="badge badge-rejected">Rejected</span>}
+        </div>
+        {latest && latest.reject_reason && <p className="muted small">Reason: {latest.reject_reason}</p>}
+        {latest && summary(latest)}
+        {!paying && (
+          <div className="row-actions">
+            <button className="btn btn-outline btn-sm" onClick={() => setPaying(true)}>
+              {latest ? 'Make payment again' : 'I have paid'}
+            </button>
+          </div>
+        )}
+        {paying && (
+          <form className="payment-form" onSubmit={send}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="Amount (optional)"
+            />
+            <input
+              value={form.reference}
+              onChange={(e) => setForm({ ...form, reference: e.target.value })}
+              placeholder="Reference / proof (e.g. GCash ref)"
+              maxLength={150}
+            />
+            <button className="btn btn-primary btn-sm" disabled={busy}>{busy ? 'Sending…' : 'Send payment'}</button>
+          </form>
+        )}
+      </>
+    );
+  } else if (latest.status === 'pending') {
+    body = (
+      <>
+        <div className="payment-head">
+          <b>{isTutor ? 'Payment awaiting your confirmation' : 'Payment sent — waiting for the tutor'}</b>
+          <span className="badge badge-pending">Pending</span>
+        </div>
+        {summary(latest)}
+        {isTutor && (
+          <div className="row-actions">
+            <button className="btn btn-primary btn-sm" onClick={accept} disabled={busy}>Accept</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setRejecting(!rejecting)}>Reject</button>
+          </div>
+        )}
+        {isTutor && rejecting && (
+          <div className="payment-form">
+            <textarea
+              rows="2"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for rejecting (optional)"
+              maxLength={300}
+            />
+            <button className="btn btn-danger btn-sm" onClick={reject} disabled={busy}>Reject payment</button>
+          </div>
+        )}
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <div className="payment-head">
+          <b>Payment cleared</b>
+          <span className="badge badge-completed">Accepted</span>
+        </div>
+        {summary(latest)}
+      </>
+    );
+  }
+
+  return (
+    <div className={`payment-box payment-${latest ? latest.status : 'none'}`}>
+      {err && <Alert type="error">{err}</Alert>}
+      {body}
+    </div>
+  );
+}
+
 /** Renders a single conversation thread. */
 function Thread({ conversationId }) {
   const { user } = useAuth();
@@ -95,6 +254,7 @@ function Thread({ conversationId }) {
         })}
         <div ref={endRef} />
       </div>
+      {conv && <PaymentBox conversationId={conversationId} conv={conv} user={user} />}
       <form className="thread-input" onSubmit={send}>
         <input
           value={text}

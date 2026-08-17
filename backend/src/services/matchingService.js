@@ -42,7 +42,7 @@ function computeScore({ tutor, subjectEntry, studentCourse, studentYear, ratingM
     }
   }
 
-  const ratingInfo = ratingMap.get(tutor.tutor_profile_id);
+  const ratingInfo = ratingMap.get(tutor.user_id);
   if (ratingInfo && ratingInfo.avg_rating) {
     breakdown.rating = Math.round((ratingInfo.avg_rating / 5) * WEIGHTS.rating * 100) / 100;
   }
@@ -109,6 +109,7 @@ async function generateMatches(studentProfileId, subjectId = null) {
         ratingMap
       });
       if (total <= 0) continue;
+      const ratingInfo = ratingMap.get(tutor.user_id);
       await matchModel.upsert({
         studentProfileId,
         tutorProfileId: tutor.tutor_profile_id,
@@ -121,7 +122,11 @@ async function generateMatches(studentProfileId, subjectId = null) {
         tutor_profile_id: tutor.tutor_profile_id,
         tutor_name: `${tutor.first_name} ${tutor.last_name}`,
         score: total,
-        breakdown
+        breakdown,
+        avg_rating: ratingInfo ? ratingInfo.avg_rating : 0,
+        rating_count: ratingInfo ? ratingInfo.rating_count : 0,
+        tags: Array.isArray(tutor.tags) ? tutor.tags : [],
+        learning_mode: tutor.learning_mode || null
       });
     }
   }

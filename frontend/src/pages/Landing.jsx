@@ -66,7 +66,7 @@ export default function Landing() {
           <li>Message, schedule, attend, and evaluate your sessions</li>
         </ol>
         <div className="quote muted">Demo accounts (passwords in the Login page dropdown): student@peerlink.edu ·
-          tutor@peerlink.edu · faculty@peerlink.edu · admin@peerlink.edu</div>
+          maria@peerlink.edu · gerome@peerlink.edu · kiel@peerlink.edu · faculty@peerlink.edu · admin@peerlink.edu</div>
       </section>
 
       <footer className="landing-footer muted">

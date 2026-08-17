@@ -12,13 +12,24 @@ const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', faculty: 'Faculty', ad
 
 /** POST /api/auth/register */
 const register = asyncHandler(async (req, res) => {
-  const { email, password, first_name, last_name, role, year_level, course } = req.body;
+  const {
+    email, password, first_name, last_name, role, year_level, course,
+    age, grade_level, school, strand, subjects_needed, subjects_teach,
+    learning_mode, preferred_schedule, preferred_time
+  } = req.body;
+  req.body.strand = req.body.strand === 'JHS (Grade 7-10)' ? 'JHS' : req.body.strand;
   validate({
     email: [v.required('email'), v.email()],
     password: [v.required('password'), v.minLen(8, 'min 8 characters')],
     first_name: [v.required('first_name'), v.maxLen(100)],
     last_name: [v.required('last_name'), v.maxLen(100)],
-    role: [v.required('role'), v.isIn(['student', 'tutor'])]
+    role: [v.required('role'), v.isIn(['student', 'tutor'])],
+    age: [v.intRange(10, 100, 'age')],
+    grade_level: [v.maxLen(50)],
+    school: [v.maxLen(150)],
+    strand: [v.isIn(['STEM', 'GAS', 'ICT', 'ABM', 'HUMSS', 'JHS'])],
+    learning_mode: [v.isIn(['online', 'face-to-face', 'both'])],
+    preferred_time: [v.maxLen(60)]
   }, req.body);
 
   if (await userModel.findByEmail(email)) {
@@ -29,9 +40,17 @@ const register = asyncHandler(async (req, res) => {
   const userId = await withTransaction(async (conn) => {
     const uid = await userModel.create({ email, password_hash: passwordHash, first_name, last_name, role }, conn);
     if (role === 'student') {
-      await studentModel.createProfile({ userId: uid, year_level, course }, conn);
+      await studentModel.createProfile({
+        userId: uid, year_level, course,
+        age, grade_level, school, strand, subjects_needed,
+        learning_mode, preferred_schedule, preferred_time
+      }, conn);
     } else {
-      await tutorModel.createProfile({ userId: uid, course }, conn);
+      await tutorModel.createProfile({
+        userId: uid, course,
+        age, grade_level, school, strand, subjects_teach,
+        learning_mode, preferred_schedule, preferred_time
+      }, conn);
     }
     return uid;
   });
@@ -84,4 +103,12 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { register, login, logout, me, ROLE_LABELS };
+/** GET /api/auth/email-exists — used by registration to block existing emails early. */
+const emailExists = asyncHandler(async (req, res) => {
+  const email = String(req.query.email || '').trim().toLowerCase();
+  validate({ email: [v.required('email'), v.email()] }, { email });
+  const user = await userModel.findByEmail(email);
+  ok(res, 200, { exists: Boolean(user) });
+});
+
+module.exports = { register, login, logout, me, emailExists, ROLE_LABELS };

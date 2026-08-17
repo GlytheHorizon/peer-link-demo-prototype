@@ -14,15 +14,15 @@ async function findByCode(code) {
   return rows[0] || null;
 }
 
-async function create({ code, name, description }) {
-  const result = await query('INSERT INTO subjects (code, name, description) VALUES (?, ?, ?)', [
-    code, name, description || null
+async function create({ code, name, description, strand }) {
+  const result = await query('INSERT INTO subjects (code, name, description, strand) VALUES (?, ?, ?, ?)', [
+    code, name, description || null, strand || null
   ]);
   return findById(result.insertId);
 }
 
 async function update(id, fields) {
-  const allowed = ['code', 'name', 'description'];
+  const allowed = ['code', 'name', 'description', 'strand'];
   const sets = [];
   const params = [];
   for (const f of allowed) {

@@ -69,7 +69,9 @@ export default function TutorProfile() {
             <h4>Subjects taught</h4>
             <div className="subject-tags">
               {tutor.subjects.map((s) => (
-                <span key={s.id} className={`tag ${Number(subjectId) === s.id ? 'tag-on' : ''}`}>{s.name}</span>
+                <span key={s.id} className={`tag ${Number(subjectId) === s.id ? 'tag-on' : ''}`}>
+                  {s.name} <b>· Proficiency {s.proficiency}/5</b>
+                </span>
               ))}
             </div>
             <h4>Weekly availability</h4>
@@ -85,7 +87,7 @@ export default function TutorProfile() {
           <label>Subject for this conversation</label>
           <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
             <option value="">Select subject…</option>
-            {tutor.subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {tutor.subjects.map((s) => <option key={s.id} value={s.id}>{s.name} (Proficiency {s.proficiency}/5)</option>)}
           </select>
           <div className="row-actions">
             <button className="btn btn-primary" onClick={startConversation} disabled={busy}>

@@ -19,6 +19,7 @@ import Reports from './pages/Reports';
 import UserManagement from './pages/UserManagement';
 import SubjectManagement from './pages/SubjectManagement';
 import ActivityLogs from './pages/ActivityLogs';
+import ComingSoon from './pages/ComingSoon';
 
 const shell = (roles, page) => (
   <ProtectedRoute roles={roles}>
@@ -52,6 +53,10 @@ export default function App() {
       <Route path="/admin/users" element={shell(['admin'], <UserManagement />)} />
       <Route path="/admin/subjects" element={shell(['admin'], <SubjectManagement />)} />
       <Route path="/admin/logs" element={shell(['admin'], <ActivityLogs />)} />
+
+      <Route path="/resources" element={shell(null, <ComingSoon title="Resources" />)} />
+      <Route path="/calendar" element={shell(null, <ComingSoon title="Calendar" />)} />
+      <Route path="/payment" element={shell(null, <ComingSoon title="Payment" />)} />
 
       <Route path="*" element={<Landing />} />
     </Routes>

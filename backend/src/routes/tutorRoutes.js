@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const c = require('../controllers/tutorController');
+const sr = require('../controllers/subjectRequestController');
 const { protect, restrictTo } = require('../middleware/auth');
 
 router.use(protect);
@@ -10,7 +11,8 @@ router.get('/me', c.getMyProfile);
 router.put('/me', c.updateMyProfile);
 router.get('/me/subjects', c.getMySubjects);
 router.put('/me/subjects', c.setMySubjects);
-router.post('/me/subjects', c.addMySubject);
+router.get('/me/subject-requests', sr.listMyRequests);
+router.post('/me/subject-requests', sr.createRequest);
 
 router.get('/:id', c.getPublicTutor);
 

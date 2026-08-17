@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const c = require('../controllers/conversationController');
+const pc = require('../controllers/conversationPaymentController');
 const messageRoutes = require('./messageRoutes');
 const { protect } = require('../middleware/auth');
 const conversationModel = require('../models/conversationModel');
@@ -12,6 +13,11 @@ router.get('/unread-count', require('../controllers/messageController').unreadCo
 router.get('/', c.listMine);
 router.post('/', c.start);
 router.get('/:id', c.getOne);
+
+router.get('/:id/payments', pc.listPayments);
+router.post('/:id/payments', pc.createPayment);
+router.post('/:id/payments/:pid/accept', pc.acceptPayment);
+router.post('/:id/payments/:pid/reject', pc.rejectPayment);
 
 router.use(
   '/:id/messages',

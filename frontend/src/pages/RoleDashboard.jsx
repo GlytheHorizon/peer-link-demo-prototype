@@ -1,96 +1,134 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useConfirm } from '../context/ConfirmContext';
 import { useApi } from '../hooks/useApi';
-import { studentService, tutorService, sessionService, conversationService, reportService, adminService, matchService } from '../services';
+import { tutorService, sessionService, matchService, conversationService, reportService, adminService } from '../services';
 import { Spinner, Alert, StatusBadge, RatingStars, formatDateTime } from '../components/ui';
 
+const RATE_PER_HOUR = 100;
+
+function timeAgo(iso) {
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+const initials = (name = '') =>
+  name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
 function StudentDashboard() {
-  const navigate = useNavigate();
-  const confirm = useConfirm();
-  const profile = useApi(studentService.getMe);
+  const { user } = useAuth();
   const sessions = useApi(sessionService.list);
-  const convos = useApi(conversationService.list);
-  const [generating, setGenerating] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const matches = useApi(matchService.list);
 
-  const runMatching = async () => {
-    const ok = await confirm({ title: 'Run matching?', message: 'Scores are recalculated from your subjects and tutor availability.', confirmText: 'Run matching' });
-    if (!ok) return;
-    setGenerating(true);
-    setMsg(null);
-    const res = await matchService.generate();
-    setGenerating(false);
-    if (res.ok) {
-      setMsg({ type: 'success', text: res.message });
-      navigate('/matches');
-    } else setMsg({ type: 'error', text: res.message });
-  };
-
-  const upcoming = (sessions.data || []).filter(
+  const all = sessions.data || [];
+  const upcoming = all.filter(
     (s) => (s.status === 'pending' || s.status === 'accepted') && new Date(s.scheduled_start) > new Date()
   );
-  const past = (sessions.data || []).filter((s) => s.status === 'completed');
+  const featured = upcoming[0];
+  const completed = all.filter((s) => s.status === 'completed');
+  const totalSpent = completed.reduce((sum, s) => sum + Math.max(0, (new Date(s.scheduled_end) - new Date(s.scheduled_start)) / 3600000) * RATE_PER_HOUR, 0);
+  const recs = (matches.data || []).slice(0, 3);
+  const greetName = (user?.first_name || 'there').toUpperCase();
 
   return (
     <div>
-      <h2>Student Dashboard</h2>
-      {(profile.loading || sessions.loading) && <Spinner />}
-      {msg && <Alert type={msg.type}>{msg.text}</Alert>}
-      {profile.data && (
-        <div className="welcome-row">
-          <div>
-            <p className="muted">Welcome back</p>
-            <h3>{profile.data.full_name}</h3>
-            <p className="muted small">{profile.data.course || 'No course set'} · Year {profile.data.year_level || '—'}</p>
-          </div>
-          <div className="row-actions">
-            <Link className="btn btn-primary" to="/sessions/new">Request a Session</Link>
-            <button className="btn btn-outline" onClick={runMatching} disabled={generating}>
-              {generating ? 'Matching…' : 'Run Tutor Matching'}
-            </button>
-          </div>
+      <h1 className="dash-greeting">
+        Welcome back, <span className="greet-name">{greetName}!</span>
+      </h1>
+
+      <div className="dash-stats">
+        <div className="dash-stat">
+          <span className="dash-stat-label">Total Sessions</span>
+          <span className="dash-stat-value">{sessions.loading ? '–' : all.length}</span>
         </div>
-      )}
-
-      <div className="stat-cards">
-        <div className="stat-card"><b>{(profile.data?.subjects || []).length}</b><span>Subjects needing help</span></div>
-        <div className="stat-card"><b>{upcoming.length}</b><span>Upcoming sessions</span></div>
-        <div className="stat-card"><b>{past.length}</b><span>Completed sessions</span></div>
-        <div className="stat-card"><b>{convos.data?.length || 0}</b><span>Conversations</span></div>
+        <div className="dash-stat">
+          <span className="dash-stat-label">Upcoming Sessions</span>
+          <span className="dash-stat-value">{upcoming.length}</span>
+        </div>
+        <div className="dash-stat">
+          <span className="dash-stat-label">Total Spent</span>
+          <span className="dash-stat-value is-green">{Math.round(totalSpent)}</span>
+        </div>
       </div>
 
-      <div className="grid-2">
-        <section className="card">
-          <h3>Upcoming sessions</h3>
-          {upcoming.length === 0 && <p className="muted">No upcoming sessions. Find a tutor and book one!</p>}
-          {upcoming.map((s) => (
-            <Link key={s.id} to={`/sessions/${s.id}`} className="list-row">
-              <div>
-                <b>{s.subject_name}</b> with {s.tutor_name}
-                <div className="muted small">{formatDateTime(s.scheduled_start)}</div>
-              </div>
-              <StatusBadge status={s.status} />
-            </Link>
-          ))}
-        </section>
-        <section className="card">
-          <h3>Recent conversations</h3>
-          {(convos.data || []).slice(0, 5).map((c) => (
-            <Link key={c.id} to={`/messages/${c.id}`} className="list-row">
-              <div>
-                <b>{c.tutor_name}</b>
-                <div className="muted small">{c.subject_name}</div>
-              </div>
-              {c.unread_count > 0 && <span className="badge badge-pending">{c.unread_count} new</span>}
-            </Link>
-          ))}
-          {(!convos.data || convos.data.length === 0) && !convos.loading && (
-            <div className="empty-state"><p className="muted">No conversations yet — visit your matches to message a tutor.</p></div>
+      <section className="upcoming-banner">
+        <div>
+          <span className="upcoming-label">Upcoming Session</span>
+          {featured ? (
+            <>
+              <h2 className="upcoming-title">{featured.subject_name} With {featured.tutor_name}</h2>
+              <span className="upcoming-time">{formatDateTime(featured.scheduled_start)}</span>
+            </>
+          ) : (
+            <>
+              <h2 className="upcoming-title">Book a Session</h2>
+              <span className="upcoming-time">No upcoming sessions — find a tutor and schedule your first session today.</span>
+            </>
           )}
-        </section>
-      </div>
+        </div>
+        <Link className="btn-join" to={featured ? `/sessions/${featured.id}` : '/matches'}>
+          {featured ? 'Join Session' : 'Book a Session'}
+        </Link>
+      </section>
+
+      <section className="dash-section">
+        <h2 className="dash-section-title">Recommended Tutors</h2>
+        {matches.loading ? (
+          <Spinner />
+        ) : recs.length === 0 ? (
+          <div className="card">
+            <p className="muted" style={{ margin: 0 }}>
+              No recommended tutors yet — <Link to="/matches">run Smart Match</Link> to find tutors for your subjects.
+            </p>
+          </div>
+        ) : (
+          <div className="tutor-row">
+            {recs.map((t) => (
+              <div className="tutor-card" key={`${t.tutor_profile_id}-${t.subject_id}`}>
+                <span className="tutor-avatar">{initials(t.tutor_name)}</span>
+                <div className="tutor-body">
+                  <div className="tutor-head">
+                    <b className="tutor-name">{t.tutor_name}</b>
+                    <span className="tutor-rating">★ {Number(t.compatibility_score).toFixed(0)}% match</span>
+                  </div>
+                  <span className="tutor-subject">{t.subject_name}</span>
+                  <div className="tutor-foot">
+                    <span className="tutor-rate">100/hr</span>
+                    <Link className="btn-book" to={`/tutors/${t.tutor_profile_id}`}>View Profile</Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="dash-section">
+        <h2 className="dash-section-title">Recent Activity</h2>
+        <div className="activity-panel">
+          {sessions.loading ? (
+            <div className="activity-row"><span className="muted">Loading…</span></div>
+          ) : completed.length === 0 ? (
+            <div className="activity-row">
+              <span className="muted">No activity yet — book your first session to get started.</span>
+            </div>
+          ) : completed.slice(0, 5).map((s) => (
+            <div className="activity-row" key={s.id}>
+              <div className="activity-main">
+                <b>Session Completed</b>
+                <span className="muted">{s.subject_name} with {s.tutor_name}</span>
+              </div>
+              <span className="activity-time">{timeAgo(s.scheduled_end)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

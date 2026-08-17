@@ -3,44 +3,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
 import { subjectService, matchService, studentService } from '../services';
-import { Spinner, Alert, EmptyState, RatingStars } from '../components/ui';
+import { Spinner, Alert, EmptyState } from '../components/ui';
 
-const BREAKDOWN_LABELS = {
-  subject: 'Subject compatibility',
-  proficiency: 'Tutor proficiency',
-  courseYear: 'Course / year match',
-  availability: 'Availability',
-  rating: 'Tutor rating'
-};
-
-function ScoreBreakdown({ breakdown }) {
-  if (!breakdown) return null;
-  return (
-    <div className="score-breakdown muted small">
-      {Object.entries(BREAKDOWN_LABELS).map(([key, label]) => (
-        <div key={key} className="sb-row">
-          <span>{label}</span>
-          <span>{breakdown[key] !== undefined ? Number(breakdown[key]).toFixed(0) : 0}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const COMPAT_COLORS = (score) =>
-  score >= 85 ? 'green' : score >= 70 ? 'blue' : score >= 50 ? 'amber' : 'red';
+const CARD_VARIANTS = ['royal', 'sky', 'violet'];
 
 export default function MatchingResults() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const subjects = useApi(subjectService.list);
   const mine = useApi(studentService.getMe);
+  const [mode, setMode] = useState('smart');
+  const [query, setQuery] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
-  const [ratings, setRatings] = useState({});
 
   const run = async (subjectId, quiet = false) => {
     if (!quiet) {
@@ -62,78 +40,135 @@ export default function MatchingResults() {
     run(null, true);
   }, []);
 
-  const scoreStyles = { fontSize: '1.6rem', fontWeight: 700 };
+  const subjectName = (id) => subjects.data?.find((s) => s.id === id)?.name || `Subject #${id}`;
+
+  const q = query.trim().toLowerCase();
+  const visible = q
+    ? matches.filter(
+        (m) =>
+          m.tutor_name.toLowerCase().includes(q) ||
+          subjectName(m.subject_id).toLowerCase().includes(q)
+      )
+    : mode === 'manual' ? matches : matches.slice(0, 3);
 
   return (
     <div>
-      <h2>Matching Results</h2>
-      <p className="muted">
-        The backend matching engine scores every compatible tutor between 0 and 100 using subject (40%),
-        proficiency (20%), course/year (15%), availability (15%), and ratings (10%).
-      </p>
-
-      <div className="card match-controls">
-        <div className="grid-2">
-          <div>
-            <label>Filter by subject</label>
-            <select
-              value={filterSubject}
-              onChange={(e) => { setFilterSubject(e.target.value); run(e.target.value ? Number(e.target.value) : null); }}
-            >
-              <option value="">All my subjects</option>
-              {(mine.data?.subjects || []).map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="row-actions align-end">
-            <button className="btn btn-primary" onClick={() => run(filterSubject ? Number(filterSubject) : null)} disabled={loading}>
-              {loading ? 'Matching…' : 'Re-run Matching'}
-            </button>
-            <Link className="btn btn-outline" to="/subjects">Edit subjects</Link>
-          </div>
-        </div>
-        {msg && <Alert type={msg.type}>{msg.text}</Alert>}
-        {err && <Alert type="error">{err}</Alert>}
+      <div className="tutor-match-head">
+        <h2 className="tm-title">Tutor Matching</h2>
+        <Link className="btn btn-request" to="/sessions/new">Book Session Request</Link>
       </div>
+
+      <div className="mode-tabs" role="tablist" aria-label="Search mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'smart'}
+          className={`mode-tab ${mode === 'smart' ? 'on' : ''}`}
+          onClick={() => setMode('smart')}
+        >
+          Smart Match
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'manual'}
+          className={`mode-tab ${mode === 'manual' ? 'on' : ''}`}
+          onClick={() => setMode('manual')}
+        >
+          Manual Search
+        </button>
+      </div>
+
+      <div className="card manual-search">
+        <input
+          type="search"
+          placeholder="Search tutors by name or subject…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search tutors"
+        />
+        {query && (
+          <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+            ×
+          </button>
+        )}
+      </div>
+
+      <div className="section-row">
+        <span className="section-label">
+          {q ? `Results for "${query}"` : mode === 'manual' ? 'Search Results' : 'Top Recommended Tutors'}
+        </span>
+        <div className="match-tools">
+          <select
+            value={filterSubject}
+            onChange={(e) => { setFilterSubject(e.target.value); run(e.target.value ? Number(e.target.value) : null); }}
+          >
+            <option value="">All my subjects</option>
+            {(mine.data?.subjects || []).map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <button className="btn btn-ghost btn-sm" onClick={() => run(filterSubject ? Number(filterSubject) : null)} disabled={loading}>
+            {loading ? 'Matching…' : 'Refresh'}
+          </button>
+          <Link className="btn btn-ghost btn-sm" to="/subjects">Edit subjects</Link>
+        </div>
+      </div>
+
+      {msg && <Alert type={msg.type}>{msg.text}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
 
       {loading && <Spinner label="Running matching algorithm…" />}
 
-      {!loading && matches.length === 0 && (
+      {!loading && visible.length === 0 && (
         <EmptyState
-          title="No matches yet"
+          title="No tutors found"
           description="Add subjects you need help with, or make sure tutors teach them."
           action={<Link className="btn btn-primary" to="/subjects">Go to Subjects</Link>}
         />
       )}
 
       <div className="match-list">
-        {matches.map((m, i) => (
-          <div className="card match-card" key={`${m.tutor_profile_id}-${m.subject_id}`}>
-            <div className="match-rank">
-              <span className="rank-circle">{i + 1}</span>
-            </div>
-            <div className="match-info">
-              <h3>{m.tutor_name}</h3>
-              <span className="muted small">for {subjects.data?.find((s) => s.id === m.subject_id)?.name || `Subject #${m.subject_id}`}</span>
-              <ScoreBreakdown breakdown={m.breakdown} />
-            </div>
-            <div className="match-score">
-              <div style={{ ...scoreStyles, color: `var(--${COMPAT_COLORS(m.score)})` }}>{Number(m.score).toFixed(0)}%</div>
-              <span className="muted small">compatibility</span>
-              <div className="row-actions stack">
-                <Link className="btn btn-primary btn-sm" to={`/tutors/${m.tutor_profile_id}`}>View Profile</Link>
-                <Link className="btn btn-outline btn-sm" to={`/messages?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`}>Message</Link>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => navigate(`/sessions/new?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`)}
-                >
-                  Schedule
-                </button>
+        {visible.map((m, i) => {
+          const tags = [
+            ...(Array.isArray(m.tags) ? m.tags : []),
+            ...(m.learning_mode === 'both' ? ['Online & In-Person']
+              : m.learning_mode === 'online' ? ['Online Session']
+              : m.learning_mode === 'face-to-face' ? ['Face-to-Face'] : [])
+          ];
+          return (
+          <div className={`req-card req-card--${CARD_VARIANTS[i % CARD_VARIANTS.length]}`} key={`${m.tutor_profile_id}-${m.subject_id}`}>
+            <div className="req-info">
+              <h3 className="req-name">{m.tutor_name}</h3>
+              <p className="req-desc">
+                Expert {subjectName(m.subject_id)} tutor helping students build strong foundations and improve their grades.
+              </p>
+              <div className="req-facts">
+                <div className="req-fact">
+                  <b>{m.avg_rating ? `${Number(m.avg_rating).toFixed(1)}/5.0` : 'No ratings'}</b>
+                  <span>{m.rating_count ? `${m.rating_count} rating${m.rating_count === 1 ? '' : 's'}` : 'Rating'}</span>
+                </div>
+                <div className="req-fact"><b>100/hr</b><span>Price</span></div>
+                <div className="req-fact"><b>{Number(m.score).toFixed(0)}%</b><span>Match</span></div>
               </div>
+              {tags.length > 0 && (
+                <div className="req-tags">
+                  {tags.slice(0, 4).map((t) => <span key={t} className="req-tag">{t}</span>)}
+                </div>
+              )}
+            </div>
+            <div className="req-actions">
+              <Link className="req-btn req-btn--outline" to={`/tutors/${m.tutor_profile_id}`}>View Profile</Link>
+              <button
+                className="req-btn req-btn--book"
+                onClick={() => navigate(`/sessions/new?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`)}
+              >
+                Book Session
+              </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

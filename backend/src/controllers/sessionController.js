@@ -4,10 +4,13 @@ const sessionModel = require('../models/sessionModel');
 const subjectModel = require('../models/subjectModel');
 const tutorModel = require('../models/tutorModel');
 const conversationModel = require('../models/conversationModel');
+const paymentModel = require('../models/paymentModel');
 const log = require('../services/activityLogService').log;
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
 const MAX_DURATION_MS = 4 * 60 * 60 * 1000;
+const RATE_PER_HOUR = 100;
+const PAY_METHODS = ['gcash', 'maya', 'bank_card'];
 
 /** GET /api/sessions — my sessions (student or tutor roles). */
 const listMine = asyncHandler(async (req, res) => {
@@ -128,4 +131,53 @@ const cancel = asyncHandler(async (req, res) => {
   ok(res, 200, await sessionModel.findById(session.id), 'Session cancelled');
 });
 
-module.exports = { listMine, getOne, createRequest, respond, complete, cancel };
+/** POST /api/sessions/:id/pay — student pays for an accepted session (may set the date/time here). */
+const pay = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'student') throw new ApiError(403, 'Only students can pay for sessions');
+
+  const { method, scheduled_start, scheduled_end } = req.body;
+  validate({ method: [v.required('method'), v.isIn(PAY_METHODS)] }, req.body);
+
+  const session = await sessionModel.findById(Number(req.params.id));
+  if (!session) throw new ApiError(404, 'Session not found');
+  if (session.student_id !== req.user.id) throw new ApiError(403, 'Only the booking student can pay');
+  if (session.status !== 'accepted') throw new ApiError(409, 'Only accepted sessions can be paid');
+
+  const existing = await paymentModel.findBySessionId(session.id);
+  if (existing) throw new ApiError(409, 'Session is already paid');
+
+  let start = new Date(session.scheduled_start);
+  let end = new Date(session.scheduled_end);
+
+  if (scheduled_start !== undefined || scheduled_end !== undefined) {
+    validate({
+      scheduled_start: [v.required('scheduled_start'), v.date('start')],
+      scheduled_end: [v.required('scheduled_end'), v.date('end')]
+    }, req.body);
+
+    start = new Date(scheduled_start);
+    end = new Date(scheduled_end);
+    if (end.getTime() - start.getTime() < MIN_DURATION_MS) throw new ApiError(400, 'Sessions must be at least 15 minutes long');
+    if (end.getTime() - start.getTime() > MAX_DURATION_MS) throw new ApiError(400, 'Sessions cannot exceed 4 hours');
+    if (start.getTime() <= Date.now()) throw new ApiError(400, 'Sessions must be scheduled in the future');
+
+    const startIso = start.toISOString().slice(0, 19).replace('T', ' ');
+    const endIso = end.toISOString().slice(0, 19).replace('T', ' ');
+    if (await sessionModel.hasOverlap({ userId: req.user.id, start: startIso, end: endIso, excludeSessionId: session.id })) {
+      throw new ApiError(409, 'This conflicts with one of your existing sessions');
+    }
+    if (await sessionModel.hasOverlap({ userId: session.tutor_id, start: startIso, end: endIso, excludeSessionId: session.id })) {
+      throw new ApiError(409, 'The tutor has an overlapping session at that time');
+    }
+    await sessionModel.updateSchedule(session.id, startIso, endIso);
+  }
+
+  const hours = Math.max((end.getTime() - start.getTime()) / 3600000, 15 / 60);
+  const amount = Math.round(hours * RATE_PER_HOUR);
+
+  const payment = await paymentModel.create({ sessionId: session.id, studentId: req.user.id, method, amount });
+  log(req, 'session.pay', 'session', session.id, { method, amount });
+  ok(res, 201, payment, 'Payment recorded — your session is confirmed');
+});
+
+module.exports = { listMine, getOne, createRequest, respond, complete, cancel, pay };
