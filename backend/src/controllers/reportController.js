@@ -5,13 +5,13 @@ const log = require('../services/activityLogService').log;
 /** GET /api/reports/overview — headline metrics. Faculty + admin. */
 const overview = asyncHandler(async (req, res) => {
   const [users, byRole, sessions, byStatus, evaluations, matches, completedLast30] = await Promise.all([
-    query('SELECT COUNT(*) AS total FROM users WHERE is_active = 1'),
-    query('SELECT role, COUNT(*) AS total FROM users WHERE is_active = 1 GROUP BY role'),
+    query('SELECT COUNT(*) AS total FROM users WHERE is_active = TRUE'),
+    query('SELECT role, COUNT(*) AS total FROM users WHERE is_active = TRUE GROUP BY role'),
     query('SELECT COUNT(*) AS total FROM sessions'),
     query('SELECT status, COUNT(*) AS total FROM sessions GROUP BY status'),
     query('SELECT COUNT(*) AS total, ROUND(AVG(rating), 2) AS avg_rating FROM evaluations'),
     query('SELECT COUNT(*) AS total FROM matches'),
-    query("SELECT COUNT(*) AS total FROM sessions WHERE status = 'completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
+    query("SELECT COUNT(*) AS total FROM sessions WHERE status = 'completed' AND created_at >= now() - INTERVAL '30 days'")
   ]);
   log(req, 'report.overview', 'report');
   ok(res, 200, {
@@ -37,8 +37,8 @@ const sessionsReport = asyncHandler(async (req, res) => {
     query(
       `SELECT u.id AS tutor_id, CONCAT(u.first_name, ' ', u.last_name) AS tutor_name,
               COUNT(s.id) AS total_sessions,
-              SUM(s.status = 'completed') AS completed,
-              SUM(s.status = 'pending') AS pending
+              SUM((s.status = 'completed')::int) AS completed,
+              SUM((s.status = 'pending')::int) AS pending
        FROM users u
        LEFT JOIN sessions s ON s.tutor_id = u.id
        WHERE u.role = 'tutor'

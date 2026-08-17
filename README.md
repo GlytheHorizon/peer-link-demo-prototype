@@ -5,7 +5,7 @@ A web-based peer tutoring platform built with a four-tier architecture:
 **User Layer** – Students, Tutors, Faculty, Administrators
 **Presentation Layer** – React (Vite)
 **Application Layer** – Node.js + Express REST API
-**Database Layer** – MySQL (normalized schema)
+**Database Layer** – Supabase (PostgreSQL, normalized schema)
 
 ## Features
 
@@ -30,7 +30,7 @@ A web-based peer tutoring platform built with a four-tier architecture:
 | ------- | ----------------------------------- |
 | Frontend| React 18, React Router, Vite        |
 | Backend | Node.js, Express, JSON Web Token    |
-| DB      | MySQL 8 (mysql2, parameterized SQL) |
+| DB      | Supabase (PostgreSQL 15+, `pg` driver) |
 | Auth    | bcryptjs + JWT                      |
 
 ## Project Structure (tree + function of each file)
@@ -42,7 +42,7 @@ peerlink/
 ├── README.md                 This documentation
 │
 ├── database/
-│   └── schema.sql            Full schema: 13 normalized MySQL tables + demo seed data
+│   └── schema.sql            Full Supabase/PostgreSQL schema: 13 normalized tables + demo seed data
 │
 ├── backend/                  Node.js + Express REST API
 │   ├── .env                  Local secrets (DB_PASSWORD, JWT_SECRET) — never committed
@@ -54,7 +54,7 @@ peerlink/
 │       │
 │       ├── config/
 │       │   ├── index.js      Central env config: port, client URL, JWT secret/expiry
-│       │   └── db.js         mysql2 connection pool + query helpers
+│       │   └── db.js         pg connection pool + query helpers (MySQL-style shim)
 │       │                     (query, withTransaction, likeEscape, qex)
 │       │
 │       ├── middleware/
@@ -197,20 +197,19 @@ peerlink/
 
 ## Setup
 
-### 1. Database (phpMyAdmin or CLI)
+### 1. Database (Supabase)
 
-Import `database/schema.sql` (creates the `peerlink` database, 13 normalized
-tables, and demo seed data). Run with the MySQL CLI:
-
-```bat
-mysql -u root -p < database\schema.sql
-```
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor**, paste the entire contents of `database/schema.sql`,
+   and run it — this creates the 13 tables plus demo seed data.
+3. Go to **Project Settings → Database → Connection string**, copy the
+   **Direct connection** string (port 5432), and use it as `DATABASE_URL`.
 
 ### 2. Backend
 
 ```bat
 cd backend
-copy .env.example .env   :: then set DB_PASSWORD and JWT_SECRET
+copy .env.example .env   :: then set DATABASE_URL and JWT_SECRET
 npm install
 npm start                :: http://localhost:5000
 ```

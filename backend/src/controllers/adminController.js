@@ -119,7 +119,7 @@ const stats = asyncHandler(async (req, res) => {
     query('SELECT COUNT(*) AS total FROM conversations'),
     query('SELECT COUNT(*) AS total FROM messages'),
     query('SELECT COUNT(*) AS total FROM activity_logs'),
-    query('SELECT COUNT(*) AS total FROM users WHERE is_active = 0')
+    query('SELECT COUNT(*) AS total FROM users WHERE is_active = FALSE')
   ]);
   ok(res, 200, {
     users: users[0].total,

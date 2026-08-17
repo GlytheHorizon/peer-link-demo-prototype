@@ -22,7 +22,7 @@ async function create({ conversationId, senderId, body }) {
 
 async function markConversationRead(conversationId, userId) {
   await query(
-    'UPDATE messages SET is_read = 1 WHERE conversation_id = ? AND sender_id <> ? AND is_read = 0',
+    'UPDATE messages SET is_read = TRUE WHERE conversation_id = ? AND sender_id <> ? AND is_read = FALSE',
     [conversationId, userId]
   );
 }
@@ -31,7 +31,7 @@ async function countUnreadForUser(userId) {
   const rows = await query(
     `SELECT COUNT(*) AS total FROM messages m
      JOIN conversations c ON c.id = m.conversation_id
-     WHERE (c.student_id = ? OR c.tutor_id = ?) AND m.sender_id <> ? AND m.is_read = 0`,
+     WHERE (c.student_id = ? OR c.tutor_id = ?) AND m.sender_id <> ? AND m.is_read = FALSE`,
     [userId, userId, userId]
   );
   return rows[0].total;

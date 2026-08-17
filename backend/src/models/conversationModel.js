@@ -35,7 +35,7 @@ async function listForUser(userId) {
             s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
             CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
-            (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id <> ? AND m.is_read = 0) AS unread_count,
+            (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id <> ? AND m.is_read = FALSE) AS unread_count,
             (SELECT m.body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_message
      FROM conversations c
      JOIN subjects s ON s.id = c.subject_id

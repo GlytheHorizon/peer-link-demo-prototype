@@ -62,7 +62,7 @@ async function list({ role, search, page = 1, limit = 50 } = {}) {
 }
 
 async function countByRole() {
-  return query('SELECT role, COUNT(*) AS total FROM users WHERE is_active = 1 GROUP BY role');
+  return query('SELECT role, COUNT(*) AS total FROM users WHERE is_active = TRUE GROUP BY role');
 }
 
 module.exports = { findByEmail, findById, create, update, changePassword, list, countByRole };

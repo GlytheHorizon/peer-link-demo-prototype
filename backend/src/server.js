@@ -4,10 +4,10 @@ const { pool } = require('./config/db');
 
 async function start() {
   // Fail fast if the database is unreachable.
-  const conn = await pool.getConnection();
-  await conn.ping();
+  const conn = await pool.connect();
+  await conn.query('SELECT 1');
   conn.release();
-  console.log('[DB] Connected to MySQL');
+  console.log('[DB] Connected to Supabase (PostgreSQL)');
 
   app.listen(config.port, () => {
     console.log(`[API] PeerLink backend running on http://localhost:${config.port}`);

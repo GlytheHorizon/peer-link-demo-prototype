@@ -10,16 +10,16 @@ function errorHandler(err, req, res, _next) {
     });
   }
 
-  // MySQL duplicate key -> 409 Conflict
-  if (err && err.code === 'ER_DUP_ENTRY') {
+  // PostgreSQL unique violation (23505) -> 409 Conflict
+  if (err && err.code === '23505') {
     return res.status(409).json({
       success: false,
       message: 'A record with the same unique value already exists'
     });
   }
 
-  // Unknown DB errors (foreign key, constraint, connection) -> 500 with safe message
-  if (err && err.code && err.code.startsWith('ER_')) {
+  // Other PostgreSQL constraint errors (23503 FK, 23514 CHECK, ...) -> 500 with safe message
+  if (err && typeof err.code === 'string' && err.code.startsWith('23')) {
     console.error('[DB_ERROR]', err);
     return res.status(500).json({
       success: false,

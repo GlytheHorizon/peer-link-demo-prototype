@@ -61,7 +61,7 @@ async function findProfileById(id) {
     `SELECT tp.*, CONCAT(u.first_name, ' ', u.last_name) AS full_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
-     WHERE tp.id = ? AND u.is_active = 1`,
+     WHERE tp.id = ? AND u.is_active = TRUE`,
     [id]
   );
   return rows[0] || null;
@@ -127,7 +127,7 @@ async function getAllTutors() {
             tp.availability, u.first_name, u.last_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
-     WHERE u.is_active = 1`
+     WHERE u.is_active = TRUE`
   );
 }
 

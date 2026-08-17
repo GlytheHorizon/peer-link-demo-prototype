@@ -4,7 +4,9 @@ async function upsert({ studentProfileId, tutorProfileId, subjectId, score, brea
   await query(
     `INSERT INTO matches (student_profile_id, tutor_profile_id, subject_id, compatibility_score, score_breakdown)
      VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE compatibility_score = VALUES(compatibility_score), score_breakdown = VALUES(score_breakdown)`,
+     ON CONFLICT (student_profile_id, tutor_profile_id, subject_id) DO UPDATE
+       SET compatibility_score = EXCLUDED.compatibility_score,
+           score_breakdown = EXCLUDED.score_breakdown`,
     [studentProfileId, tutorProfileId, subjectId, score, JSON.stringify(breakdown)]
   );
 }

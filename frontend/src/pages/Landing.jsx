@@ -70,7 +70,7 @@ export default function Landing() {
       </section>
 
       <footer className="landing-footer muted">
-        PeerLink — Peer Tutoring Platform · Four-tier architecture · React + Express + MySQL
+        PeerLink — Peer Tutoring Platform · Four-tier architecture · React + Express + Supabase
       </footer>
     </div>
   );
