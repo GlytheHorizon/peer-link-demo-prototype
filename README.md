@@ -222,6 +222,29 @@ npm install
 npm run dev              :: http://localhost:5173 (proxies /api to :5000)
 ```
 
+## Deploy to Vercel
+
+The repo ships with a `vercel.json` that defines two **services** on one shared
+domain (requires Vercel's Services framework preset):
+
+- `frontend` — Vite SPA (root: `frontend`)
+- `backend` — Express API (root: `backend`, entrypoint `src/app.js`)
+
+All `/api/*` requests rewrite to the backend service; everything else serves
+the SPA. The frontend calls the API with relative `/api` paths, so no base URL
+config is needed.
+
+1. Import this repository into Vercel.
+2. In **Project Settings → Build and Deployment**, set **Framework Preset** to
+   **Services** (required for the `services` key in `vercel.json`).
+3. Add the project environment variables (shared by both services):
+   - `DATABASE_URL` — Supabase direct connection string
+   - `DATABASE_SSL=true`
+   - `JWT_SECRET` — a long random string
+   - `CLIENT_URL` — your deployed app URL (e.g. `https://your-app.vercel.app`)
+4. Deploy. The Express app runs as a single Vercel Function on Fluid compute
+   (Supabase connection pooling keeps the DB pool happy across cold starts).
+
 ## Demo Accounts
 
 | Role    | Email                | Password      | Function |
