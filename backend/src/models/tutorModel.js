@@ -52,7 +52,7 @@ async function getProfileWithSubjects(userId) {
   const profile = await findProfileByUserId(userId);
   if (!profile) return null;
   const subjects = await query(
-    `SELECT s.id, s.code, s.name, s.description, ts.proficiency
+    `SELECT s.id, s.code, s.name, s.description, ts.proficiency, ts.rate_per_hour
      FROM tutor_subjects ts
      JOIN subjects s ON s.id = ts.subject_id
      WHERE ts.tutor_profile_id = ?
@@ -77,7 +77,7 @@ async function getPublicTutor(id) {
   const profile = await findProfileById(id);
   if (!profile) return null;
   const subjects = await query(
-    `SELECT s.id, s.code, s.name, s.description, ts.proficiency
+    `SELECT s.id, s.code, s.name, s.description, ts.proficiency, ts.rate_per_hour
      FROM tutor_subjects ts
      JOIN subjects s ON s.id = ts.subject_id
      WHERE ts.tutor_profile_id = ?`,
@@ -97,26 +97,45 @@ async function replaceSubjects(profileId, items, conn) {
   for (const item of items) {
     const sid = typeof item === 'number' ? item : item.subject_id;
     const prof = Math.min(5, Math.max(1, Number(item.proficiency) || 3));
+    const rate = clampRate(item.rate_per_hour);
     await exec(
-      'INSERT INTO tutor_subjects (tutor_profile_id, subject_id, proficiency) VALUES (?, ?, ?)',
-      [profileId, sid, prof]
+      'INSERT INTO tutor_subjects (tutor_profile_id, subject_id, proficiency, rate_per_hour) VALUES (?, ?, ?, ?)',
+      [profileId, sid, prof, rate]
     );
   }
 }
 
+function clampRate(value) {
+  const n = Number(value);
+  if (Number.isFinite(n)) {
+    return Math.min(100000, Math.max(0, Math.round(n * 100) / 100));
+  }
+  return 100;
+}
+
 /** Attach a subject to a tutor profile; returns false if already attached. */
-async function addSubjectToProfile(profileId, subjectId, proficiency) {
+async function addSubjectToProfile(profileId, subjectId, proficiency, ratePerHour) {
   const exists = await query(
     'SELECT 1 FROM tutor_subjects WHERE tutor_profile_id = ? AND subject_id = ?',
     [profileId, subjectId]
   );
   if (exists[0]) return false;
   const prof = Math.min(5, Math.max(1, Number(proficiency) || 3));
+  const rate = clampRate(ratePerHour);
   await query(
-    'INSERT INTO tutor_subjects (tutor_profile_id, subject_id, proficiency) VALUES (?, ?, ?)',
-    [profileId, subjectId, prof]
+    'INSERT INTO tutor_subjects (tutor_profile_id, subject_id, proficiency, rate_per_hour) VALUES (?, ?, ?, ?)',
+    [profileId, subjectId, prof, rate]
   );
   return true;
+}
+
+/** Hourly rate a tutor charges for a given subject; null when not set. */
+async function getSubjectRate(profileId, subjectId) {
+  const rows = await query(
+    'SELECT rate_per_hour FROM tutor_subjects WHERE tutor_profile_id = ? AND subject_id = ?',
+    [profileId, subjectId]
+  );
+  return rows[0] ? Number(rows[0].rate_per_hour) : null;
 }
 
 async function ensureProfile(userId, data, conn) {
@@ -136,6 +155,26 @@ async function getAllTutors() {
   );
 }
 
+/** All active tutors with their teaching subjects — used for browsing resource folders. */
+async function getAllTutorsWithSubjects() {
+  const tutors = await getAllTutors();
+  if (tutors.length === 0) return [];
+  const rows = await query(
+    `SELECT ts.tutor_profile_id, s.id AS subject_id, s.name AS subject_name
+     FROM tutor_subjects ts
+     JOIN subjects s ON s.id = ts.subject_id
+     WHERE ts.tutor_profile_id IN (?)
+     ORDER BY s.name`,
+    [tutors.map((t) => t.tutor_profile_id)]
+  );
+  const byTutor = new Map();
+  for (const r of rows) {
+    if (!byTutor.has(r.tutor_profile_id)) byTutor.set(r.tutor_profile_id, []);
+    byTutor.get(r.tutor_profile_id).push({ id: r.subject_id, name: r.subject_name });
+  }
+  return tutors.map((t) => ({ ...t, subjects: byTutor.get(t.tutor_profile_id) || [] }));
+}
+
 module.exports = {
   findProfileByUserId,
   createProfile,
@@ -146,6 +185,8 @@ module.exports = {
   getSubjectKeys,
   replaceSubjects,
   addSubjectToProfile,
+  getSubjectRate,
   ensureProfile,
-  getAllTutors
+  getAllTutors,
+  getAllTutorsWithSubjects
 };

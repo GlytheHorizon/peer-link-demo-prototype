@@ -10,24 +10,34 @@ const toQuery = (params = {}) => {
 };
 
 export const userService = {
-  updateMe: (payload) => apiFetch('/users/me', { method: 'PUT', body: payload })
+  updateMe: (payload) => apiFetch('/users/me', { method: 'PUT', body: payload }),
+  heartbeat: () => apiFetch('/users/heartbeat', { method: 'POST' })
 };
 
 export const studentService = {
   getMe: () => apiFetch('/students/me'),
   updateMe: (payload) => apiFetch('/students/me', { method: 'PUT', body: payload }),
   getSubjects: () => apiFetch('/students/me/subjects'),
-  setSubjects: (subjectIds) => apiFetch('/students/me/subjects', { method: 'PUT', body: { subject_ids: subjectIds } })
+  setSubjects: (subjectIds) => apiFetch('/students/me/subjects', { method: 'PUT', body: { subject_ids: subjectIds } }),
+  getPublic: (id) => apiFetch(`/students/${id}`)
 };
 
 export const tutorService = {
   getMe: () => apiFetch('/tutors/me'),
   updateMe: (payload) => apiFetch('/tutors/me', { method: 'PUT', body: payload }),
   getSubjects: () => apiFetch('/tutors/me/subjects'),
-  setSubjects: (payload) => apiFetch('/tutors/me/subjects', { method: 'PUT', body: payload }),
+  setSubjects: (subjects) => apiFetch('/tutors/me/subjects', { method: 'PUT', body: { subjects } }),
   addSubjectRequest: (payload) => apiFetch('/tutors/me/subject-requests', { method: 'POST', body: payload }),
   listSubjectRequests: () => apiFetch('/tutors/me/subject-requests'),
-  getPublic: (id) => apiFetch(`/tutors/${id}`)
+  getPublic: (id) => apiFetch(`/tutors/${id}`),
+  list: () => apiFetch('/tutors')
+};
+
+export const resourceService = {
+  list: () => apiFetch('/resources'),
+  folders: () => apiFetch('/resources/folders'),
+  upload: (payload) => apiFetch('/resources', { method: 'POST', body: payload }),
+  remove: (id) => apiFetch(`/resources/${id}`, { method: 'DELETE' })
 };
 
 export const subjectService = {
@@ -39,14 +49,19 @@ export const subjectService = {
 
 export const matchService = {
   generate: (subjectId) => apiFetch('/matches/generate', { method: 'POST', body: subjectId ? { subject_id: subjectId } : {} }),
+  search: (q, subjectId) => apiFetch(`/matches/search?q=${encodeURIComponent(q)}${subjectId ? `&subject_id=${subjectId}` : ''}`),
+  browse: (subjectId) => apiFetch(`/matches/browse${subjectId ? `?subject_id=${subjectId}` : ''}`),
   list: (subjectId) => apiFetch(`/matches${subjectId ? `?subject_id=${subjectId}` : ''}`),
   get: (id) => apiFetch(`/matches/${id}`)
 };
 
 export const conversationService = {
   list: () => apiFetch('/conversations'),
-  start: (tutorId, subjectId) => apiFetch('/conversations', { method: 'POST', body: { tutor_id: tutorId, subject_id: subjectId } }),
+  start: (otherId, subjectId, as = 'student') => apiFetch('/conversations', { method: 'POST', body: as === 'tutor'
+    ? { student_id: otherId, subject_id: subjectId }
+    : { tutor_id: otherId, subject_id: subjectId } }),
   get: (id) => apiFetch(`/conversations/${id}`),
+  deleteConversation: (id) => apiFetch(`/conversations/${id}`, { method: 'DELETE' }),
   getMessages: (id) => apiFetch(`/conversations/${id}/messages`),
   sendMessage: (id, body) => apiFetch(`/conversations/${id}/messages`, { method: 'POST', body: { body } }),
   deleteMessage: (id, messageId) => apiFetch(`/conversations/${id}/messages/${messageId}`, { method: 'DELETE' }),
@@ -64,7 +79,17 @@ export const sessionService = {
   respond: (id, decision) => apiFetch(`/sessions/${id}/respond`, { method: 'PATCH', body: { decision } }),
   complete: (id) => apiFetch(`/sessions/${id}/complete`, { method: 'PATCH', body: {} }),
   cancel: (id) => apiFetch(`/sessions/${id}/cancel`, { method: 'PATCH', body: {} }),
+  rescheduleRequests: {
+    create: (id, payload) => apiFetch(`/sessions/${id}/reschedule-requests`, { method: 'POST', body: payload }),
+    list: (id) => apiFetch(`/sessions/${id}/reschedule-requests`),
+    respond: (id, requestId, decision) => apiFetch(`/sessions/${id}/reschedule-requests/${requestId}/respond`, { method: 'POST', body: { decision } })
+  },
+  remove: (id) => apiFetch(`/sessions/${id}`, { method: 'DELETE' }),
   pay: (id, payload) => apiFetch(`/sessions/${id}/pay`, { method: 'POST', body: payload })
+};
+
+export const paymentService = {
+  mine: () => apiFetch('/payments/mine')
 };
 
 export const evaluationService = {

@@ -18,26 +18,43 @@ const createRequest = asyncHandler(async (req, res) => {
 
   const normalized = code.trim().toUpperCase();
   const existing = await subjectModel.findByCode(normalized);
+  let teachesIt = false;
   if (existing) {
     const profile = await tutorModel.findProfileByUserId(req.user.id);
     const keys = profile ? await tutorModel.getSubjectKeys(profile.id) : [];
-    if (keys.includes(existing.id)) {
+    teachesIt = keys.includes(existing.id);
+    if (teachesIt) {
       throw new ApiError(409, `You already teach ${normalized} — no need to request it again`);
     }
   }
-  if (await subjectRequestModel.findByTutorCode(req.user.id, normalized)) {
+
+  // A pending request for the same code blocks re-submitting. A rejected one
+  // (or an approved one whose subject is no longer taught) is overwritten by
+  // the new application instead of conflicting.
+  const prior = await subjectRequestModel.findByTutorCode(req.user.id, normalized);
+  if (prior && prior.status === 'pending') {
     throw new ApiError(409, `You already requested ${normalized} — it is awaiting review`);
   }
 
-  const request = await subjectRequestModel.create(req.user.id, {
-    code: normalized,
-    name: name.trim(),
-    description,
-    proficiency,
-    strand: strand || null
-  });
+  const request = prior
+    ? await subjectRequestModel.resubmit(prior.id, {
+        code: normalized,
+        name: name.trim(),
+        description,
+        proficiency,
+        strand: strand || null
+      })
+    : await subjectRequestModel.create(req.user.id, {
+        code: normalized,
+        name: name.trim(),
+        description,
+        proficiency,
+        strand: strand || null
+      });
   log(req, 'subject.request', 'subject_request', request.id);
-  ok(res, 201, request, 'Subject addition request sent. An administrator will review it.');
+  ok(res, 201, request, prior
+    ? `Your request for ${normalized} was resubmitted — an administrator will review it again.`
+    : 'Subject addition request sent. An administrator will review it.');
 });
 
 /** GET /api/tutors/me/subject-requests — the tutor's own requests. */

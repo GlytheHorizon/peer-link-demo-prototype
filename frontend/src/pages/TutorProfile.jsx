@@ -69,8 +69,8 @@ export default function TutorProfile() {
             <h4>Subjects taught</h4>
             <div className="subject-tags">
               {tutor.subjects.map((s) => (
-                <span key={s.id} className={`tag ${Number(subjectId) === s.id ? 'tag-on' : ''}`}>
-                  {s.name} <b>· Proficiency {s.proficiency}/5</b>
+                <span key={s.id} className={`tag ${subjectId && Number(subjectId) === Number(s.id) ? 'tag-on' : ''}`}>
+                  {s.name} <b>· Proficiency {s.proficiency}/5</b> <b>· ₱{Number(s.rate_per_hour) || 100}/hr</b>
                 </span>
               ))}
             </div>
@@ -93,12 +93,17 @@ export default function TutorProfile() {
             <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
               {busy ? 'Starting…' : 'Message this tutor'}
             </button>
-            <Link
+            <button
               className="btn btn-outline"
-              to={`/sessions/new?tutor=${tutor.user_id}&subject=${subjectId || ''}`}
+              disabled={busy}
+              onClick={async () => {
+                if (!subjectId) { setMsg({ type: 'error', text: 'Pick a subject first' }); return; }
+                const ok = await confirm({ title: 'Schedule a session?', message: `Schedule a session with ${tutor.full_name} on this subject?`, confirmText: 'Schedule session' });
+                if (ok) navigate(`/sessions/new?tutor=${tutor.user_id}&subject=${subjectId}`);
+              }}
             >
               Schedule a session
-            </Link>
+            </button>
           </div>
         </div>
       </div>

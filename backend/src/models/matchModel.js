@@ -16,11 +16,13 @@ async function findByStudent(studentProfileId) {
     `SELECT m.id, m.subject_id, m.compatibility_score, m.score_breakdown, m.created_at,
             m.tutor_profile_id, t.user_id AS tutor_user_id,
             CONCAT(u.first_name, ' ', u.last_name) AS tutor_name, u.email AS tutor_email,
-            s.code AS subject_code, s.name AS subject_name
+            s.code AS subject_code, s.name AS subject_name,
+            ts.rate_per_hour
      FROM matches m
      JOIN tutor_profiles t ON t.id = m.tutor_profile_id
      JOIN users u ON u.id = t.user_id
      JOIN subjects s ON s.id = m.subject_id
+     LEFT JOIN tutor_subjects ts ON ts.tutor_profile_id = t.id AND ts.subject_id = m.subject_id
      WHERE m.student_profile_id = ?
      ORDER BY m.compatibility_score DESC, m.created_at DESC`,
     [studentProfileId]

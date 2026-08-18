@@ -2,6 +2,8 @@ const { verifyToken } = require('../utils/jwt');
 const { ApiError } = require('../utils/http');
 const userModel = require('../models/userModel');
 
+const PRESENCE_THROTTLE_MS = 60 * 1000;
+
 /** Verifies the JWT and attaches the fresh user to req.user. */
 async function protect(req, res, next) {
   try {
@@ -18,6 +20,15 @@ async function protect(req, res, next) {
       return next(new ApiError(403, 'Account is deactivated'));
     }
     req.user = user;
+    try {
+      const last = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+      if (Date.now() - last > PRESENCE_THROTTLE_MS) {
+        await userModel.touchLastSeen(user.id);
+        user.last_seen_at = new Date();
+      }
+    } catch {
+      /* presence tracking must never block a request */
+    }
     next();
   } catch (err) {
     return next(new ApiError(401, 'Invalid or expired token'));

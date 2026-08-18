@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const FEATURES = [
-  { title: 'Smart Matching', text: 'Automated 0–100 compatibility scoring across subject, proficiency, course level, availability & ratings.' },
+  { title: 'Smart Matching', text: 'Automated 0–100 compatibility scoring across subject, proficiency, hourly rate, course level, availability & ratings.' },
   { title: 'Messaging', text: 'Chat directly with tutors before booking so you can confirm the right fit.' },
   { title: 'Scheduling', text: 'Request sessions, get tutor confirmation, and prevent overlapping bookings automatically.' },
   { title: 'Ratings & Reports', text: 'Evaluate sessions after completion; faculty and admins get live tutoring reports.' }

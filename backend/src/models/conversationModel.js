@@ -18,7 +18,9 @@ async function findById(id) {
   const rows = await query(
     `SELECT c.*, s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
-            CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name
+            CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
+            st.last_seen_at AS student_last_seen_at,
+            tt.last_seen_at AS tutor_last_seen_at
      FROM conversations c
      JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
@@ -35,15 +37,18 @@ async function listForUser(userId) {
             s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
             CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
+            st.last_seen_at AS student_last_seen_at,
+            tt.last_seen_at AS tutor_last_seen_at,
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id <> ? AND m.is_read = FALSE) AS unread_count,
             (SELECT m.body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_message
      FROM conversations c
      JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
      JOIN users tt ON tt.id = c.tutor_id
-     WHERE c.student_id = ? OR c.tutor_id = ?
+     WHERE (c.student_id = ? OR c.tutor_id = ?)
+       AND (c.deleted_by IS NULL OR c.deleted_by <> ?)
      ORDER BY c.updated_at DESC`,
-    [userId, userId, userId]
+    [userId, userId, userId, userId]
   );
 }
 
@@ -55,4 +60,27 @@ async function isParticipant(conversationId, userId) {
   return rows.length > 0;
 }
 
-module.exports = { findOrCreate, findById, listForUser, isParticipant };
+/**
+ * Deletes a conversation for one participant only.
+ * - First participant to delete: hides it for themselves (deleted_by = userId).
+ * - Once both participants have deleted, the conversation (messages, payments) is pruned.
+ */
+async function removeForUser(conversationId, userId) {
+  const rows = await query('SELECT deleted_by FROM conversations WHERE id = ?', [conversationId]);
+  const conv = rows[0];
+  if (!conv) return { deleted: false };
+  const otherSideAlreadyDeleted = conv.deleted_by !== null && conv.deleted_by !== userId;
+  if (otherSideAlreadyDeleted) {
+    await query('DELETE FROM conversations WHERE id = ?', [conversationId]);
+    return { deleted: true, hard: true };
+  }
+  await query('UPDATE conversations SET deleted_by = ? WHERE id = ?', [userId, conversationId]);
+  return { deleted: true, hard: false };
+}
+
+/** Brings a conversation back into the caller's list (only clears their own delete flag). */
+async function restoreForUser(conversationId, userId) {
+  await query('UPDATE conversations SET deleted_by = NULL WHERE id = ? AND deleted_by = ?', [conversationId, userId]);
+}
+
+module.exports = { findOrCreate, findById, listForUser, isParticipant, removeForUser, restoreForUser };

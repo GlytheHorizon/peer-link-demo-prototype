@@ -7,7 +7,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const app = express();
 
 app.use(cors({ origin: config.clientUrl, credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '30mb' }));
 
 // Lightweight request logging
 app.use((req, res, next) => {
@@ -30,10 +30,12 @@ app.use('/api/matches', require('./routes/matchRoutes'));
 app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/messages', express.Router().get('/unread-count', protect, require('./controllers/messageController').unreadCount));
 app.use('/api/sessions', require('./routes/sessionRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/evaluations', require('./routes/evaluationRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/activity-logs', require('./routes/activityLogRoutes'));
+app.use('/api/resources', require('./routes/resourceRoutes'));
 
 app.get('/api/roles', protect, (req, res) =>
   res.json({ success: true, message: 'Role check', data: { role: req.user.role } })

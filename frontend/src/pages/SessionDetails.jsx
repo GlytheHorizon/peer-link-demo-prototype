@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { sessionService, evaluationService } from '../services';
@@ -7,6 +7,7 @@ import { Spinner, Alert, StatusBadge, RatingStars, formatDateTime } from '../com
 
 export default function SessionDetails() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const confirm = useConfirm();
   const [session, setSession] = useState(null);
@@ -122,7 +123,29 @@ export default function SessionDetails() {
                 Mark as completed
               </button>
             )}
-            {(isStudent || isTutor) && ['pending', 'accepted'].includes(session.status) && (
+            {isStudent && session.status === 'pending' && (
+              <button
+                className="btn btn-danger btn-block"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Delete session request?',
+                    message: 'Delete this session booking? It has not been confirmed by the tutor yet and will be removed permanently.',
+                    confirmText: 'Delete request',
+                    danger: true
+                  });
+                  if (!ok) return;
+                  setBusy(true);
+                  const res = await sessionService.remove(session.id);
+                  setBusy(false);
+                  if (res.ok) navigate('/sessions');
+                  else setErr(res.message);
+                }}
+              >
+                Delete request
+              </button>
+            )}
+            {(isStudent || isTutor) && ['accepted'].includes(session.status) && (
               <button
                 className="btn btn-ghost btn-block"
                 disabled={busy}

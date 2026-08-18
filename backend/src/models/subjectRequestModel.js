@@ -51,4 +51,15 @@ async function setStatus(id, status) {
   return result.affectedRows;
 }
 
-module.exports = { create, findById, findByTutorCode, listByTutor, listByStatus, setStatus };
+/** Re-activates a previously reviewed request (e.g. rejected) with fresh details, resetting it to pending. */
+async function resubmit(id, { code, name, description, proficiency, strand }) {
+  await query(
+    `UPDATE subject_requests
+        SET code = ?, name = ?, description = ?, proficiency = ?, strand = ?, status = 'pending', reviewed_at = NULL
+      WHERE id = ?`,
+    [code, name, description || null, proficiency || 3, strand || null, id]
+  );
+  return findById(id);
+}
+
+module.exports = { create, findById, findByTutorCode, listByTutor, listByStatus, setStatus, resubmit };

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
-import { subjectService, matchService, studentService } from '../services';
+import { subjectService, matchService } from '../services';
 import { Spinner, Alert, EmptyState } from '../components/ui';
 
 const CARD_VARIANTS = ['royal', 'sky', 'violet'];
@@ -11,11 +11,12 @@ export default function MatchingResults() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const subjects = useApi(subjectService.list);
-  const mine = useApi(studentService.getMe);
   const [mode, setMode] = useState('smart');
   const [query, setQuery] = useState('');
-  const [filterSubject, setFilterSubject] = useState('');
   const [matches, setMatches] = useState([]);
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [browseResults, setBrowseResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
@@ -40,16 +41,57 @@ export default function MatchingResults() {
     run(null, true);
   }, []);
 
+  useEffect(() => {
+    const q = query.trim();
+    let cancelled = false;
+    if (!q) {
+      setSearchResults(null);
+      setSearching(false);
+      return () => { cancelled = true; };
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      const res = await matchService.search(q);
+      if (cancelled) return;
+      setSearchResults(res.ok ? res.data : []);
+      setSearching(false);
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query]);
+
+  useEffect(() => {
+    if (query.trim() !== '' || mode !== 'manual') return;
+    let cancelled = false;
+    setBrowseResults(null);
+    (async () => {
+      const res = await matchService.browse();
+      if (cancelled) return;
+      setBrowseResults(res.ok ? res.data : []);
+    })();
+    return () => { cancelled = true; };
+  }, [mode, query]);
+
   const subjectName = (id) => subjects.data?.find((s) => s.id === id)?.name || `Subject #${id}`;
+
+  const book = async (m) => {
+    const ok = await confirm({
+      title: 'Book this session?',
+      message: `Book a ${subjectName(m.subject_id)} session with ${m.tutor_name}?`,
+      confirmText: 'Book Session'
+    });
+    if (ok) navigate(`/sessions/new?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`);
+  };
 
   const q = query.trim().toLowerCase();
   const visible = q
-    ? matches.filter(
+    ? (searchResults ?? matches.filter(
         (m) =>
           m.tutor_name.toLowerCase().includes(q) ||
           subjectName(m.subject_id).toLowerCase().includes(q)
-      )
-    : mode === 'manual' ? matches : matches.slice(0, 3);
+      ))
+    : mode === 'manual'
+      ? (browseResults ?? [])
+      : matches.slice(0, 3);
 
   return (
     <div>
@@ -99,16 +141,7 @@ export default function MatchingResults() {
           {q ? `Results for "${query}"` : mode === 'manual' ? 'Search Results' : 'Top Recommended Tutors'}
         </span>
         <div className="match-tools">
-          <select
-            value={filterSubject}
-            onChange={(e) => { setFilterSubject(e.target.value); run(e.target.value ? Number(e.target.value) : null); }}
-          >
-            <option value="">All my subjects</option>
-            {(mine.data?.subjects || []).map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          <button className="btn btn-ghost btn-sm" onClick={() => run(filterSubject ? Number(filterSubject) : null)} disabled={loading}>
+          <button className="btn btn-ghost btn-sm" onClick={() => run(null)} disabled={loading}>
             {loading ? 'Matching…' : 'Refresh'}
           </button>
           <Link className="btn btn-ghost btn-sm" to="/subjects">Edit subjects</Link>
@@ -119,12 +152,18 @@ export default function MatchingResults() {
       {err && <Alert type="error">{err}</Alert>}
 
       {loading && <Spinner label="Running matching algorithm…" />}
+      {searching && <Spinner label="Searching tutors…" />}
+      {mode === 'manual' && query.trim() === '' && browseResults === null && <Spinner label="Loading all tutors…" />}
 
-      {!loading && visible.length === 0 && (
+      {!loading && !searching && !(mode === 'manual' && query.trim() === '' && browseResults === null) && visible.length === 0 && (
         <EmptyState
           title="No tutors found"
-          description="Add subjects you need help with, or make sure tutors teach them."
-          action={<Link className="btn btn-primary" to="/subjects">Go to Subjects</Link>}
+          description={q
+            ? 'No tutor matches your search. Try another subject name or tutor name.'
+            : mode === 'manual'
+              ? 'No tutors are available yet. Check back later.'
+              : 'Add subjects you need help with, or make sure tutors teach them.'}
+          action={q || mode === 'manual' ? null : <Link className="btn btn-primary" to="/subjects">Go to Subjects</Link>}
         />
       )}
 
@@ -148,8 +187,8 @@ export default function MatchingResults() {
                   <b>{m.avg_rating ? `${Number(m.avg_rating).toFixed(1)}/5.0` : 'No ratings'}</b>
                   <span>{m.rating_count ? `${m.rating_count} rating${m.rating_count === 1 ? '' : 's'}` : 'Rating'}</span>
                 </div>
-                <div className="req-fact"><b>100/hr</b><span>Price</span></div>
-                <div className="req-fact"><b>{Number(m.score).toFixed(0)}%</b><span>Match</span></div>
+                <div className="req-fact"><b>{Number(m.rate_per_hour) || 100}/hr</b><span>Price</span></div>
+                <div className="req-fact"><b>{m.score != null ? `${Number(m.score).toFixed(0)}%` : '—'}</b><span>Match</span></div>
               </div>
               {tags.length > 0 && (
                 <div className="req-tags">
@@ -161,7 +200,7 @@ export default function MatchingResults() {
               <Link className="req-btn req-btn--outline" to={`/tutors/${m.tutor_profile_id}`}>View Profile</Link>
               <button
                 className="req-btn req-btn--book"
-                onClick={() => navigate(`/sessions/new?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`)}
+                onClick={() => book(m)}
               >
                 Book Session
               </button>

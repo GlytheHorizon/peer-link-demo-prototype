@@ -20,7 +20,8 @@ const NAV = {
     { to: '/profile', label: 'Profile', icon: '✎' },
     { to: '/subjects', label: 'Subjects I Teach', icon: '☰' },
     { to: '/messages', label: 'Messages', icon: '✉' },
-    { to: '/sessions', label: 'My Sessions', icon: '◷' }
+    { to: '/sessions', label: 'My Sessions', icon: '◷' },
+    { to: '/calendar', label: 'Calendar', icon: '▦' }
   ],
   faculty: [
     { to: '/dashboard', label: 'Dashboard', icon: '▤' },

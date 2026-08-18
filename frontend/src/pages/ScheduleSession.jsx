@@ -1,16 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { subjectService, sessionService, matchService, tutorService } from '../services';
 import { Spinner, Alert } from '../components/ui';
 
 const pad = (n) => String(n).padStart(2, '0');
-
-function nextHourInput(offsetHours = 1) {
-  const d = new Date(Date.now() + offsetHours * 60 * 60 * 1000);
-  d.setMinutes(0, 0, 0);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 const fmtDate = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${d.getFullYear()}`;
 const fmtTime = (d) => {
@@ -24,6 +18,26 @@ const fmtRange = (startIso, endIso) => {
   return `${fmtDate(s)} – ${fmtTime(s)} – ${fmtTime(e)}`;
 };
 
+function nextFreeSlot(mine, offsetHours = 1, maxSlots = 96) {
+  const occupied = (mine || []).filter(
+    (s) => s.status === 'pending' || s.status === 'accepted'
+  );
+  for (let i = 0; i < maxSlots; i++) {
+    const start = new Date(Date.now() + (offsetHours + i) * 3600000);
+    start.setMinutes(0, 0, 0);
+    const end = new Date(start.getTime() + 3600000);
+    const clashes = occupied.some((s) => {
+      const s1 = new Date(s.scheduled_start).getTime();
+      const e1 = new Date(s.scheduled_end).getTime();
+      return start.getTime() < e1 && end.getTime() > s1;
+    });
+    if (!clashes) return { start, end };
+  }
+  const start = new Date(Date.now() + (offsetHours + maxSlots) * 3600000);
+  start.setMinutes(0, 0, 0);
+  return { start, end: new Date(start.getTime() + 3600000) };
+}
+
 export default function ScheduleSession() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -34,11 +48,15 @@ export default function ScheduleSession() {
   const requests = useApi(sessionService.list);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState(null);
+  const firedKey = useRef('');
 
   const pending = (requests.data || []).filter((s) => s.status === 'pending');
 
   useEffect(() => {
     if (!autoTutor || !autoSubject) return;
+    const key = `${autoTutor}:${autoSubject}`;
+    if (firedKey.current === key) return;
+    firedKey.current = key;
     let cancelled = false;
     const idParam = Number(autoTutor);
     const subjectId = Number(autoSubject);
@@ -75,18 +93,19 @@ export default function ScheduleSession() {
 
       const mine = await sessionService.list();
       const dup = (mine.data || []).find(
-        (s) => s.tutor_id === uid && s.subject_id === subjectId && s.status === 'pending'
+        (s) => Number(s.tutor_id) === uid && Number(s.subject_id) === subjectId && s.status === 'pending'
       );
       if (dup) {
         if (!cancelled) navigate('/sessions');
         return;
       }
 
+      const slot = nextFreeSlot(mine.data);
       const res = await sessionService.create({
         tutor_id: uid,
         subject_id: subjectId,
-        scheduled_start: new Date(nextHourInput(1)).toISOString(),
-        scheduled_end: new Date(nextHourInput(2)).toISOString()
+        scheduled_start: slot.start.toISOString(),
+        scheduled_end: slot.end.toISOString()
       });
       if (cancelled) return;
       if (res.ok) {

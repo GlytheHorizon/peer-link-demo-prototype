@@ -33,6 +33,28 @@ const listMyMatches = asyncHandler(async (req, res) => {
   ok(res, 200, matches);
 });
 
+/** GET /api/matches/search?q=&subject_id= — free-text search across all tutors/subjects. */
+const search = asyncHandler(async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) throw new ApiError(400, 'Query parameter q is required');
+  const subjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
+  if (subjectId) {
+    validate({ subject_id: [v.intRange(1, 1000000, 'subject id')] }, { subject_id });
+  }
+  const results = await matchingService.searchTutors(q, subjectId);
+  ok(res, 200, results);
+});
+
+/** GET /api/matches/browse?subject_id= — every tutor and the subjects they teach. */
+const browse = asyncHandler(async (req, res) => {
+  const subjectId = req.query.subject_id ? Number(req.query.subject_id) : null;
+  if (subjectId) {
+    validate({ subject_id: [v.intRange(1, 1000000, 'subject id')] }, { subject_id });
+  }
+  const results = await matchingService.browseTutors(subjectId ? [subjectId] : null, null);
+  ok(res, 200, results);
+});
+
 /** GET /api/matches/:id — single match (own only). */
 const getMatch = asyncHandler(async (req, res) => {
   const match = await matchModel.findById(Number(req.params.id));
@@ -44,4 +66,4 @@ const getMatch = asyncHandler(async (req, res) => {
   ok(res, 200, match);
 });
 
-module.exports = { generate, listMyMatches, getMatch };
+module.exports = { generate, listMyMatches, search, browse, getMatch };

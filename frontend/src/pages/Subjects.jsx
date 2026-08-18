@@ -34,6 +34,7 @@ export default function Subjects() {
   const [all, setAll] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [profs, setProfs] = useState({});
+  const [rates, setRates] = useState({});
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -60,8 +61,13 @@ export default function Subjects() {
         if (mine.ok) {
           setSelected(new Set(mine.data.map((s) => s.id)));
           const p = {};
-          mine.data.forEach((s) => { p[s.id] = s.proficiency || 3; });
+          const r = {};
+          mine.data.forEach((s) => {
+            p[s.id] = s.proficiency || 3;
+            r[s.id] = s.rate_per_hour != null ? Number(s.rate_per_hour) : 100;
+          });
           setProfs(p);
+          setRates(r);
         }
         if (reqs.ok) setRequests(reqs.data);
       }
@@ -114,18 +120,19 @@ export default function Subjects() {
     setBusy(false);
     if (res.ok) {
       setMsg({ type: 'success', text: res.message });
-      setRequests((prev) => [res.data, ...prev]);
+      setRequests((prev) => [res.data, ...prev.filter((r) => r.id !== res.data.id)]);
       setAdding(false);
       setAddForm({ code: '', name: '', description: '', proficiency: 3, strand: '' });
     } else setErr(res.message);
   };
 
   const setProf = (id, n) => setProfs((prev) => ({ ...prev, [id]: n }));
+  const setRate = (id, n) => setRates((prev) => ({ ...prev, [id]: n }));
 
   const saveMine = async () => {
     const ok = await confirm({
       title: 'Save subjects?',
-      message: 'Save your teaching subjects and proficiency?',
+      message: 'Save your teaching subjects, proficiency and rate per hour?',
       confirmText: 'Save'
     });
     if (!ok) return;
@@ -133,7 +140,11 @@ export default function Subjects() {
     setMsg(null);
     setErr(null);
     const res = await tutorService.setSubjects(
-      [...selected].map((id) => ({ subject_id: id, proficiency: profs[id] || 3 }))
+      [...selected].map((id) => ({
+        subject_id: id,
+        proficiency: profs[id] || 3,
+        rate_per_hour: Number(rates[id]) || 100
+      }))
     );
     setBusy(false);
     if (res.ok) setMsg({ type: 'success', text: res.message });
@@ -147,8 +158,8 @@ export default function Subjects() {
       <div>
         <h2>Subjects I Teach</h2>
         <p className="muted">
-          Pick the subjects you teach from the preset catalog below and set your proficiency (1–5), then
-          save. For a subject that is not in the catalog yet, request it and an administrator will add it.
+          Pick the subjects you teach from the preset catalog below, set your proficiency (1–5) and
+          rate per hour, then save. For a subject that is not in the catalog yet, request it and an administrator will add it.
         </p>
         <Alert type={msg?.type}>{msg ? msg.text : null}</Alert>
         <Alert type="error">{err}</Alert>
@@ -178,10 +189,20 @@ export default function Subjects() {
                       <span className="muted small desc">{s.description}</span>
                       {active ? (
                         <span className="prof-row" onClick={(e) => e.stopPropagation()}>
-                          <label className="muted small">Proficiency</label>
-                          <select value={profs[s.id] || 3} onChange={(e) => setProf(s.id, Number(e.target.value))}>
-                            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                          </select>
+                          <span className="prof-fields">
+                            <label className="muted small">Proficiency</label>
+                            <select value={profs[s.id] || 3} onChange={(e) => setProf(s.id, Number(e.target.value))}>
+                              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                            <label className="muted small">Rate / hr (₱)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={rates[s.id] ?? 100}
+                              onChange={(e) => setRate(s.id, Number(e.target.value))}
+                            />
+                          </span>
                         </span>
                       ) : (
                         <span className="code-chip muted">Click to select</span>

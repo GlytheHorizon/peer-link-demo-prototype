@@ -69,7 +69,11 @@ const setMySubjects = asyncHandler(async (req, res) => {
   if (!Array.isArray(subjects) || subjects.length === 0) {
     throw new ApiError(400, 'Validation failed', ['subjects: must be a non-empty array of subjects']);
   }
-  const items = subjects.map((s) => (typeof s === 'object' ? { subject_id: Number(s.subject_id), proficiency: Number(s.proficiency) || 3 } : { subject_id: Number(s), proficiency: 3 }));
+  const items = subjects.map((s) => (
+    typeof s === 'object'
+      ? { subject_id: Number(s.subject_id), proficiency: Number(s.proficiency) || 3, rate_per_hour: s.rate_per_hour }
+      : { subject_id: Number(s), proficiency: 3 }
+  ));
   const unique = [...new Map(items.map((s) => [s.subject_id, s])).values()];
   for (const item of unique) {
     if (!Number.isInteger(item.subject_id)) throw new ApiError(400, 'Validation failed', ['subjects: all subject ids must be integers']);
@@ -82,6 +86,11 @@ const setMySubjects = asyncHandler(async (req, res) => {
   ok(res, 200, await tutorModel.getProfileWithSubjects(req.user.id), 'Subjects updated');
 });
 
+/** GET /api/tutors — all active tutors with their subjects (folder browsing). */
+const listTutors = asyncHandler(async (req, res) => {
+  ok(res, 200, await tutorModel.getAllTutorsWithSubjects());
+});
+
 /** GET /api/tutors/:id — public tutor profile view. */
 const getPublicTutor = asyncHandler(async (req, res) => {
   const tutor = await tutorModel.getPublicTutor(Number(req.params.id));
@@ -91,4 +100,4 @@ const getPublicTutor = asyncHandler(async (req, res) => {
   ok(res, 200, { ...tutor, avg_rating: mine.avg_rating, rating_count: mine.rating_count });
 });
 
-module.exports = { getMyProfile, updateMyProfile, getMySubjects, setMySubjects, getPublicTutor };
+module.exports = { getMyProfile, updateMyProfile, getMySubjects, setMySubjects, listTutors, getPublicTutor };

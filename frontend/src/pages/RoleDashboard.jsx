@@ -32,7 +32,7 @@ function StudentDashboard() {
   );
   const featured = upcoming[0];
   const completed = all.filter((s) => s.status === 'completed');
-  const totalSpent = completed.reduce((sum, s) => sum + Math.max(0, (new Date(s.scheduled_end) - new Date(s.scheduled_start)) / 3600000) * RATE_PER_HOUR, 0);
+  const totalSpent = completed.reduce((sum, s) => sum + Math.max(0, (new Date(s.scheduled_end) - new Date(s.scheduled_start)) / 3600000) * (Number(s.rate_per_hour) || RATE_PER_HOUR), 0);
   const recs = (matches.data || []).slice(0, 3);
   const greetName = (user?.first_name || 'there').toUpperCase();
 
@@ -99,7 +99,7 @@ function StudentDashboard() {
                   </div>
                   <span className="tutor-subject">{t.subject_name}</span>
                   <div className="tutor-foot">
-                    <span className="tutor-rate">100/hr</span>
+                    <span className="tutor-rate">{Number(t.rate_per_hour) || RATE_PER_HOUR}/hr</span>
                     <Link className="btn-book" to={`/tutors/${t.tutor_profile_id}`}>View Profile</Link>
                   </div>
                 </div>

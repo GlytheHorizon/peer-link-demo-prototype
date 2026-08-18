@@ -1,6 +1,6 @@
 const { query, qex, likeEscape } = require('../config/db');
 
-const SAFE_COLUMNS = 'id, email, first_name, last_name, role, is_active, created_at, updated_at';
+const SAFE_COLUMNS = 'id, email, first_name, last_name, role, is_active, last_seen_at, created_at, updated_at';
 
 async function findByEmail(email) {
   const rows = await query('SELECT * FROM users WHERE email = ?', [email]);
@@ -39,6 +39,11 @@ async function changePassword(id, newHash) {
   await query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, id]);
 }
 
+/** Records that the user was just seen active (presence heartbeat). */
+async function touchLastSeen(id) {
+  await query('UPDATE users SET last_seen_at = now() WHERE id = ?', [id]);
+}
+
 async function list({ role, search, page = 1, limit = 50 } = {}) {
   const where = [];
   const params = [];
@@ -65,4 +70,4 @@ async function countByRole() {
   return query('SELECT role, COUNT(*) AS total FROM users WHERE is_active = TRUE GROUP BY role');
 }
 
-module.exports = { findByEmail, findById, create, update, changePassword, list, countByRole };
+module.exports = { findByEmail, findById, create, update, changePassword, touchLastSeen, list, countByRole };

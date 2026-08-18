@@ -27,6 +27,12 @@ const listUsers = asyncHandler(async (req, res) => {
   ok(res, 200, data);
 });
 
+/** POST /api/users/heartbeat — presence ping while the app is open. */
+const heartbeat = asyncHandler(async (req, res) => {
+  await userModel.touchLastSeen(req.user.id);
+  ok(res, 200, { last_seen_at: new Date().toISOString() });
+});
+
 /** GET /api/users/:id — view a user (faculty + admin). */
 const getUser = asyncHandler(async (req, res) => {
   const user = await userModel.findById(Number(req.params.id));
@@ -34,4 +40,4 @@ const getUser = asyncHandler(async (req, res) => {
   ok(res, 200, user);
 });
 
-module.exports = { getMe, updateMe, listUsers, getUser };
+module.exports = { getMe, updateMe, heartbeat, listUsers, getUser };

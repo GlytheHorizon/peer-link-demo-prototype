@@ -13,6 +13,7 @@ router.get('/unread-count', require('../controllers/messageController').unreadCo
 router.get('/', c.listMine);
 router.post('/', c.start);
 router.get('/:id', c.getOne);
+router.delete('/:id', c.deleteOne);
 
 router.get('/:id/payments', pc.listPayments);
 router.post('/:id/payments', pc.createPayment);

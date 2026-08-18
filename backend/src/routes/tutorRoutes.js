@@ -14,6 +14,7 @@ router.put('/me/subjects', c.setMySubjects);
 router.get('/me/subject-requests', sr.listMyRequests);
 router.post('/me/subject-requests', sr.createRequest);
 
-router.get('/:id', c.getPublicTutor);
+  router.get('/:id', c.getPublicTutor);
+  router.get('/', c.listTutors);
 
 module.exports = router;
