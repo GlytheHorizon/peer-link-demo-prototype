@@ -5,6 +5,7 @@ const subjectModel = require('../models/subjectModel');
 const tutorModel = require('../models/tutorModel');
 const conversationModel = require('../models/conversationModel');
 const paymentModel = require('../models/paymentModel');
+const conversationPaymentModel = require('../models/conversationPaymentModel');
 const rescheduleRequestModel = require('../models/rescheduleRequestModel');
 const log = require('../services/activityLogService').log;
 
@@ -31,6 +32,28 @@ const getOne = asyncHandler(async (req, res) => {
   ok(res, 200, { ...session, can_evaluate: session.student_id === req.user.id && session.status === 'completed' && !session.evaluation_id });
 });
 
+/** GET /api/sessions/conflicts?start&end&other_id&exclude_session_id — live overlap check for scheduling (booleans only, no private data). */
+const checkConflicts = asyncHandler(async (req, res) => {
+  const { start, end, other_id, exclude_session_id } = req.query;
+  validate({
+    start: [v.required('start'), v.date('start')],
+    end: [v.required('end'), v.date('end')]
+  }, req.query);
+
+  const startIso = new Date(start).toISOString().slice(0, 19).replace('T', ' ');
+  const endIso = new Date(end).toISOString().slice(0, 19).replace('T', ' ');
+  const excludeId = Number(exclude_session_id);
+  const exclude = Number.isInteger(excludeId) && excludeId > 0 ? excludeId : null;
+
+  const mine = await sessionModel.hasOverlap({ userId: req.user.id, start: startIso, end: endIso, excludeSessionId: exclude });
+  let otherBusy = false;
+  const otherId = Number(other_id);
+  if (Number.isInteger(otherId) && otherId > 0 && otherId !== req.user.id) {
+    otherBusy = await sessionModel.hasOverlap({ userId: otherId, start: startIso, end: endIso, excludeSessionId: exclude });
+  }
+  ok(res, 200, { mine, other_busy: otherBusy, conflict: mine || otherBusy });
+});
+
 /** POST /api/sessions — student creates a session request. */
 const createRequest = asyncHandler(async (req, res) => {
   if (req.user.role !== 'student') throw new ApiError(403, 'Only students can create session requests');
@@ -54,6 +77,10 @@ const createRequest = asyncHandler(async (req, res) => {
   if (!(await subjectModel.findById(subject_id))) throw new ApiError(404, 'Subject not found');
   const tutorProfile = await tutorModel.findProfileByUserId(tutor_id);
   if (!tutorProfile) throw new ApiError(404, 'Tutor not found');
+
+  if (await sessionModel.hasActiveBooking({ studentId: req.user.id, tutorId: tutor_id, subjectId: subject_id })) {
+    throw new ApiError(409, 'You already have an active session with this tutor for this subject');
+  }
 
   const startIso = start.toISOString().slice(0, 19).replace('T', ' ');
   const endIso = end.toISOString().slice(0, 19).replace('T', ' ');
@@ -85,10 +112,13 @@ const createRequest = asyncHandler(async (req, res) => {
   ok(res, 201, session, 'Session request created — waiting for tutor response');
 });
 
-/** PATCH /api/sessions/:id/respond — tutor accepts or rejects. */
+/** PATCH /api/sessions/:id/respond — tutor accepts or rejects (with optional reason). */
 const respond = asyncHandler(async (req, res) => {
-  const { decision } = req.body;
-  validate({ decision: [v.required('decision'), v.isIn(['accepted', 'rejected'])] }, req.body);
+  const { decision, reason } = req.body;
+  validate({
+    decision: [v.required('decision'), v.isIn(['accepted', 'rejected'])],
+    reason: [v.maxLen(300)]
+  }, req.body);
   const session = await sessionModel.findById(Number(req.params.id));
   if (!session) throw new ApiError(404, 'Session not found');
   if (session.tutor_id !== req.user.id) throw new ApiError(403, 'Only the assigned tutor can respond');
@@ -101,24 +131,51 @@ const respond = asyncHandler(async (req, res) => {
       throw new ApiError(409, 'You have an overlapping session at that time; reject or cancel it first');
     }
   }
-  await sessionModel.updateStatus(session.id, decision);
-  log(req, 'session.respond', 'session', session.id, { decision });
+  const reasonText = decision === 'rejected' && reason != null ? String(reason).trim().slice(0, 300) || null : null;
+  await sessionModel.updateStatus(session.id, decision, reasonText);
+  log(req, 'session.respond', 'session', session.id, { decision, ...(reasonText ? { reason: reasonText } : {}) });
   ok(res, 200, await sessionModel.findById(session.id), decision === 'accepted' ? 'Session confirmed' : 'Session rejected');
 });
 
-/** PATCH /api/sessions/:id/complete — tutor marks the session completed. */
-const complete = asyncHandler(async (req, res) => {
+/** POST /api/sessions/:id/complete-confirm — a participant confirms the session
+ *  was completed. The session only becomes 'completed' once BOTH the student
+ *  and the tutor have confirmed; students can then rate/evaluate the tutor. */
+const confirmComplete = asyncHandler(async (req, res) => {
   const session = await sessionModel.findById(Number(req.params.id));
   if (!session) throw new ApiError(404, 'Session not found');
-  if (session.tutor_id !== req.user.id) throw new ApiError(403, 'Only the tutor can mark a session completed');
-  if (session.status !== 'accepted') throw new ApiError(409, 'Only accepted sessions can be completed');
-  await sessionModel.updateStatus(session.id, 'completed');
-  log(req, 'session.complete', 'session', session.id);
-  ok(res, 200, await sessionModel.findById(session.id), 'Session completed — the student can now evaluate');
+  if (session.student_id !== req.user.id && session.tutor_id !== req.user.id) {
+    throw new ApiError(403, 'You are not part of this session');
+  }
+  if (session.status === 'completed') throw new ApiError(409, 'Session is already completed');
+  if (session.status !== 'accepted') throw new ApiError(409, `Only confirmed sessions can be completed — this session is ${session.status}`);
+  if (!session.payment_id) {
+    throw new ApiError(409, 'This session has not been paid yet — completion unlocks once the payment is confirmed');
+  }
+
+  const isStudent = session.student_id === req.user.id;
+  if (isStudent && session.student_complete_confirmed_at) {
+    throw new ApiError(409, 'You already confirmed this session — waiting for the tutor');
+  }
+  if (!isStudent && session.tutor_complete_confirmed_at) {
+    throw new ApiError(409, 'You already confirmed this session — waiting for the student');
+  }
+
+  await sessionModel.confirmCompletion(session.id, isStudent ? 'student' : 'tutor');
+  const updated = await sessionModel.findById(session.id);
+  const completedNow = updated.status === 'completed';
+  log(req, completedNow ? 'session.complete' : 'session.complete_confirm', 'session', session.id, { by: isStudent ? 'student' : 'tutor' });
+  ok(res, 200, updated, completedNow
+    ? 'Session completed — the student can now rate your session'
+    : 'Completion confirmed — waiting for the other participant to confirm');
 });
 
-/** PATCH /api/sessions/:id/cancel — student or tutor cancels a non-completed session. */
+/** PATCH /api/sessions/:id/cancel — student or tutor cancels a non-completed session.
+ *  The student may only cancel within 5 minutes of booking (free-cancel window). */
 const cancel = asyncHandler(async (req, res) => {
+  const SESSION_CANCEL_WINDOW_MS = 5 * 60 * 1000;
+  const { reason } = req.body;
+  validate({ reason: [v.maxLen(300)] }, req.body);
+
   const session = await sessionModel.findById(Number(req.params.id));
   if (!session) throw new ApiError(404, 'Session not found');
   if (session.student_id !== req.user.id && session.tutor_id !== req.user.id) {
@@ -127,8 +184,15 @@ const cancel = asyncHandler(async (req, res) => {
   if (session.status === 'completed' || session.status === 'cancelled') {
     throw new ApiError(409, `Session is already ${session.status}`);
   }
-  await sessionModel.updateStatus(session.id, 'cancelled');
-  log(req, 'session.cancel', 'session', session.id);
+  if (req.user.id === session.student_id) {
+    const windowMs = new Date(session.created_at).getTime() + SESSION_CANCEL_WINDOW_MS - Date.now();
+    if (windowMs <= 0) {
+      throw new ApiError(409, 'The 5-minute free-cancel window has expired — you can no longer cancel this session');
+    }
+  }
+  const reasonText = reason != null ? String(reason).trim().slice(0, 300) || null : null;
+  await sessionModel.cancel(session.id, reasonText);
+  log(req, 'session.cancel', 'session', session.id, { ...(reasonText ? { reason: reasonText } : {}) });
   ok(res, 200, await sessionModel.findById(session.id), 'Session cancelled');
 });
 
@@ -278,6 +342,13 @@ const pay = asyncHandler(async (req, res) => {
   const existing = await paymentModel.findBySessionId(session.id);
   if (existing) throw new ApiError(409, 'Session is already paid');
 
+  if (session.conversation_id) {
+    const convPayments = await conversationPaymentModel.listByConversation(session.conversation_id);
+    if (convPayments.some((p) => p.status === 'accepted')) {
+      throw new ApiError(409, 'Session is already paid');
+    }
+  }
+
   let start = new Date(session.scheduled_start);
   let end = new Date(session.scheduled_end);
 
@@ -308,12 +379,28 @@ const pay = asyncHandler(async (req, res) => {
   const rate = session.rate_per_hour != null ? Number(session.rate_per_hour) : RATE_PER_HOUR;
   const amount = Math.round(hours * rate);
 
-  const payment = await paymentModel.create({ sessionId: session.id, studentId: req.user.id, method, amount });
+  let payment;
+  let message = 'Payment recorded — your session is confirmed';
+  if (session.conversation_id) {
+    if (await conversationPaymentModel.hasPending(session.conversation_id)) {
+      throw new ApiError(409, 'You already have a pending payment in the conversation — wait for the tutor to confirm it');
+    }
+    payment = await conversationPaymentModel.create({
+      conversationId: session.conversation_id,
+      studentId: req.user.id,
+      tutorId: session.tutor_id,
+      amount,
+      reference: `Session payment via ${method}`
+    });
+    message = 'Payment sent — waiting for the tutor to confirm in your conversation';
+  } else {
+    payment = await paymentModel.create({ sessionId: session.id, studentId: req.user.id, method, amount });
+  }
   log(req, 'session.pay', 'session', session.id, { method, amount });
-  ok(res, 201, payment, 'Payment recorded — your session is confirmed');
+  ok(res, 201, payment, message);
 });
 
 module.exports = {
-  listMine, getOne, createRequest, respond, complete, cancel,
-  reschedule, listRescheduleRequests, respondRescheduleRequest, deleteRequest, pay
+  listMine, getOne, createRequest, respond, confirmComplete, cancel,
+  reschedule, listRescheduleRequests, respondRescheduleRequest, deleteRequest, pay, checkConflicts
 };

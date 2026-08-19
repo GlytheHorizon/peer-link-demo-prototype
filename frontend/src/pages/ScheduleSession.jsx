@@ -57,7 +57,6 @@ export default function ScheduleSession() {
     const key = `${autoTutor}:${autoSubject}`;
     if (firedKey.current === key) return;
     firedKey.current = key;
-    let cancelled = false;
     const idParam = Number(autoTutor);
     const subjectId = Number(autoSubject);
 
@@ -79,15 +78,14 @@ export default function ScheduleSession() {
         const pub = await tutorService.getPublic(idParam);
         if (pub.ok) {
           const p = pub.data || {};
+          if (p.user_id) uid = Number(p.user_id);
           name = p.tutor_name || p.full_name || p.name || name;
         }
       }
 
       if (uid == null || Number.isNaN(uid)) {
-        if (!cancelled) {
-          setErr('Could not identify the tutor — go back to Find Tutors and try again.');
-          setSending(false);
-        }
+        setErr('Could not identify the tutor — go back to Find Tutors and try again.');
+        setSending(false);
         return;
       }
 
@@ -96,7 +94,7 @@ export default function ScheduleSession() {
         (s) => Number(s.tutor_id) === uid && Number(s.subject_id) === subjectId && s.status === 'pending'
       );
       if (dup) {
-        if (!cancelled) navigate('/sessions');
+        navigate('/sessions');
         return;
       }
 
@@ -107,7 +105,6 @@ export default function ScheduleSession() {
         scheduled_start: slot.start.toISOString(),
         scheduled_end: slot.end.toISOString()
       });
-      if (cancelled) return;
       if (res.ok) {
         setSending(false);
         navigate('/sessions', { state: { note: `Session request sent to ${name} — you'll pick the date and time when you pay.` } });
@@ -116,8 +113,6 @@ export default function ScheduleSession() {
         setErr(res.message);
       }
     })();
-
-    return () => { cancelled = true; };
   }, [autoTutor, autoSubject]);
 
   const subjectName = autoSubject

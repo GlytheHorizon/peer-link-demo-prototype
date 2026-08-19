@@ -11,18 +11,19 @@ async function findProfileByUserId(userId) {
   return rows[0] || null;
 }
 
-async function createProfile({ userId, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, subjects_teach, learning_mode, preferred_schedule, preferred_time }, conn) {
+async function createProfile({ userId, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, contact_no, gender, subjects_teach, learning_mode, preferred_schedule, preferred_time }, conn) {
   const values = [
     userId, course || null, max_year_level || 5, bio || null,
     availability ? JSON.stringify(availability) : null,
     tags && Array.isArray(tags) ? JSON.stringify(tags) : null,
     age || null, grade_level || null, school || null, strand || null,
+    contact_no || null, gender || null,
     subjects_teach ? JSON.stringify(subjects_teach) : null,
     learning_mode || null,
     preferred_schedule ? JSON.stringify(preferred_schedule) : null,
     preferred_time || null
   ];
-  const sql = 'INSERT INTO tutor_profiles (user_id, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, subjects_teach, learning_mode, preferred_schedule, preferred_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  const sql = 'INSERT INTO tutor_profiles (user_id, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, contact_no, gender, subjects_teach, learning_mode, preferred_schedule, preferred_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   if (conn) {
     return (await qex(conn, sql, values)).insertId;
   }
@@ -33,6 +34,7 @@ async function createProfile({ userId, course, max_year_level, bio, availability
 async function updateProfile(userId, fields) {
   const allowed = [
     'course', 'max_year_level', 'bio', 'availability', 'tags', 'age', 'grade_level', 'school', 'strand',
+    'contact_no', 'gender',
     'subjects_teach', 'learning_mode', 'preferred_schedule', 'preferred_time'
   ];
   const sets = [];

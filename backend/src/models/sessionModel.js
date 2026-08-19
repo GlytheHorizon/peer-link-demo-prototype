@@ -5,8 +5,9 @@ const SESSION_SELECT = `
          CONCAT(stu.first_name, ' ', stu.last_name) AS student_name, stu.email AS student_email,
          CONCAT(tut.first_name, ' ', tut.last_name) AS tutor_name, tut.email AS tutor_email,
          e.id AS evaluation_id, e.rating AS evaluation_rating,
-         p.id AS payment_id, p.method AS payment_method, p.amount AS payment_amount, p.created_at AS paid_at,
-         tsr.rate_per_hour,
+         COALESCE(p.id, cp.id) AS payment_id, p.method AS payment_method, p.amount AS payment_amount, p.created_at AS paid_at,
+         cp2.id AS pending_payment_id,
+         tsr.rate_per_hour, s.reject_reason, s.cancel_reason,
          rr.id AS reschedule_request_id, rr.requester_id AS reschedule_requester_id,
          rr.proposed_start AS reschedule_start, rr.proposed_end AS reschedule_end, rr.reason AS reschedule_reason
   FROM sessions s
@@ -17,6 +18,18 @@ const SESSION_SELECT = `
   LEFT JOIN tutor_subjects tsr ON tsr.tutor_profile_id = tpf.id AND tsr.subject_id = s.subject_id
   LEFT JOIN evaluations e ON e.session_id = s.id
   LEFT JOIN payments p ON p.session_id = s.id
+  LEFT JOIN LATERAL (
+    SELECT id
+    FROM conversation_payments
+    WHERE conversation_id = s.conversation_id AND status = 'accepted'
+    ORDER BY id DESC LIMIT 1
+  ) cp ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT id
+    FROM conversation_payments
+    WHERE conversation_id = s.conversation_id AND status = 'pending'
+    ORDER BY id DESC LIMIT 1
+  ) cp2 ON TRUE
   LEFT JOIN LATERAL (
     SELECT id, requester_id, proposed_start, proposed_end, reason
     FROM reschedule_requests
@@ -52,8 +65,39 @@ async function listForTutor(tutorId) {
   );
 }
 
-async function updateStatus(id, status) {
+async function updateStatus(id, status, rejectReason = null) {
+  if (rejectReason != null) {
+    await query('UPDATE sessions SET status = ?, reject_reason = ? WHERE id = ?', [status, rejectReason, id]);
+    return;
+  }
   await query('UPDATE sessions SET status = ? WHERE id = ?', [status, id]);
+}
+
+/** Cancels a session, optionally recording why (and when) it was cancelled. */
+async function cancel(id, reason = null) {
+  await query(
+    'UPDATE sessions SET status = ?, cancel_reason = ?, cancelled_at = now() WHERE id = ?',
+    ['cancelled', reason, id]
+  );
+}
+
+/**
+ * Records one side's completion confirmation. The session only moves to
+ * 'completed' once both the student and the tutor have confirmed.
+ */
+async function confirmCompletion(id, side) {
+  const column = side === 'student' ? 'student_complete_confirmed_at' : 'tutor_complete_confirmed_at';
+  await query(
+    `UPDATE sessions
+     SET ${column} = now(),
+         status = CASE
+           WHEN student_complete_confirmed_at IS NOT NULL
+            AND tutor_complete_confirmed_at IS NOT NULL THEN 'completed'
+           ELSE status
+         END
+     WHERE id = ?`,
+    [id]
+  );
 }
 
 async function updateSchedule(id, scheduledStart, scheduledEnd) {
@@ -85,6 +129,18 @@ async function hasOverlap({ userId, start, end, excludeSessionId = null }) {
   return rows.length > 0;
 }
 
+/** True when the student already has an active (pending/accepted) session with the same tutor for the same subject. */
+async function hasActiveBooking({ studentId, tutorId, subjectId }) {
+  const rows = await query(
+    `SELECT id FROM sessions
+     WHERE student_id = ? AND tutor_id = ? AND subject_id = ?
+       AND status IN ('pending','accepted')
+     LIMIT 1`,
+    [studentId, tutorId, subjectId]
+  );
+  return rows.length > 0;
+}
+
 async function countByStatus() {
   return query(
     `SELECT status, COUNT(*) AS total FROM sessions
@@ -100,4 +156,4 @@ async function countBetween(start, end) {
   return rows[0].total;
 }
 
-module.exports = { findById, create, listForStudent, listForTutor, updateStatus, updateSchedule, remove, hasOverlap, countByStatus, countBetween };
+module.exports = { findById, create, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };

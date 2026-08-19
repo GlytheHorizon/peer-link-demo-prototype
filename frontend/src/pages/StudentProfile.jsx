@@ -7,6 +7,25 @@ import { Spinner, Alert, formatDate, EmptyState } from '../components/ui';
 
 const STRAND_LABELS = { STEM: 'STEM', GAS: 'GAS', ICT: 'ICT', ABM: 'ABM', HUMSS: 'HUMSS', JHS: 'JHS (Grade 7-10)' };
 
+const MODE_LABELS = {
+  online: 'Online sessions',
+  f2f: 'Face-to-face sessions',
+  both: 'Online & In-Person'
+};
+
+const initialsOf = (name) => (
+  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+);
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="info-row">
+      <span className="info-label">{label}</span>
+      <span className="info-value">{value || '—'}</span>
+    </div>
+  );
+}
+
 export default function StudentProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -35,80 +54,68 @@ export default function StudentProfile() {
   const startConversation = async () => {
     const ok = await confirm({
       title: 'Start conversation?',
-      message: `Start a conversation with ${student.full_name} about ${student.subjects[0]?.name || 'their subjects'}?`,
+      message: `Start a conversation with ${student.full_name}?`,
       confirmText: 'Message student'
     });
     if (!ok) return;
     setBusy(true);
     setErr(null);
-    const res = await conversationService.start(student.user_id, student.subjects[0]?.id, 'tutor');
+    const res = await conversationService.start(student.user_id, null, 'tutor');
     setBusy(false);
     if (res.ok) navigate(`/messages/${res.data.id}`);
     else setMsg({ type: 'error', text: res.message });
   };
 
+  const strandLine = [
+    student.strand ? STRAND_LABELS[student.strand] || student.strand : null,
+    student.course ? `Course: ${student.course}` : null,
+    student.year_level ? `Year ${student.year_level}` : null,
+    student.grade_level ? `Grade ${student.grade_level}` : null
+  ].filter(Boolean).join(' · ');
+
   return (
     <div>
       <Link className="btn btn-ghost" to="/sessions">← Back to sessions</Link>
       {msg && <Alert type={msg.type}>{msg.text}</Alert>}
-      <div className="card tutor-profile">
-        <div className="tutor-head">
-          <div className="avatar">{student.full_name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</div>
-          <div>
-            <h2>{student.full_name}</h2>
-            <p className="muted">{student.email}</p>
-            <p className="muted small">
-              {student.strand ? `${STRAND_LABELS[student.strand] || student.strand}` : 'No strand set'}
-              {student.course ? ` · Course: ${student.course}` : ''}
-              {student.year_level ? ` · Year ${student.year_level}` : ''}
-              {student.grade_level ? ` · Grade ${student.grade_level}` : ''}
-            </p>
-          </div>
+      <div className="profile-header">
+        <div className="profile-avatar" aria-hidden="true">{initialsOf(student.full_name)}</div>
+        <div className="profile-identity">
+          <h3>{student.full_name}</h3>
+          <p className="profile-age">{student.email}</p>
+          {strandLine && <p className="muted small">{strandLine}</p>}
         </div>
-
-        <div className="grid-2">
-          <div>
-            <h4>About</h4>
-            <p>{student.bio || 'No bio yet.'}</p>
-            {student.school && <p className="muted small">School: {student.school}</p>}
-            {student.age && <p className="muted small">Age: {student.age}</p>}
-            {student.learning_mode && (
-              <p className="muted small">Prefers: {student.learning_mode === 'both' ? 'Online & In-Person'
-                : student.learning_mode === 'online' ? 'Online sessions' : 'Face-to-face sessions'}</p>
-            )}
-            {student.preferred_time && <p className="muted small">Preferred time: {student.preferred_time}</p>}
-          </div>
-          <div>
-            <h4>Subjects needing help</h4>
-            {student.subjects.length > 0 ? (
-              <div className="subject-tags">
-                {student.subjects.map((s) => (
-                  <span key={s.id} className="tag">{s.name}</span>
-                ))}
-              </div>
-            ) : (
-              <p className="muted small">No subjects listed yet.</p>
-            )}
-            {student.subjects_needed && Array.isArray(student.subjects_needed) && student.subjects_needed.length > 0 && (
-              <>
-                <h4>Additional needs</h4>
-                <p className="muted small">{student.subjects_needed.join(', ')}</p>
-              </>
-            )}
-          </div>
-        </div>
-
         {isTutor && (
-          <div className="card-inner actions">
-            <div className="row-actions">
-              <button className="btn btn-primary" onClick={startConversation} disabled={busy || student.subjects.length === 0}>
-                {busy ? 'Starting…' : 'Message this student'}
-              </button>
-            </div>
+          <div className="profile-actions">
+            <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
+              {busy ? 'Starting…' : '✉ Chat'}
+            </button>
           </div>
         )}
       </div>
-      <p className="muted small">Member since {formatDate(student.created_at)}</p>
+
+      <div className="card profile-panel">
+        <h4>Personal Information</h4>
+        <div className="info-rows">
+          <InfoRow label="School" value={student.school} />
+          <InfoRow label="Course" value={student.course} />
+          <InfoRow label="Year level" value={student.year_level ? `Year ${student.year_level}` : null} />
+          <InfoRow label="Grade level" value={student.grade_level} />
+          <InfoRow label="Strand / level" value={student.strand ? STRAND_LABELS[student.strand] || student.strand : null} />
+          <InfoRow label="Age" value={student.age ? `${student.age} yrs old` : null} />
+          <InfoRow label="Member since" value={formatDate(student.created_at)} />
+        </div>
+      </div>
+
+      <div className="card profile-panel">
+        <h4>Learning preferences</h4>
+        <div className="info-rows">
+          <InfoRow label="Learning mode" value={MODE_LABELS[student.learning_mode] || student.learning_mode} />
+          <InfoRow label="Preferred schedule" value={(student.preferred_schedule || []).join(', ')} />
+          <InfoRow label="Preferred time" value={student.preferred_time} />
+          <InfoRow label="Subjects needing help" value={(student.subjects || []).map((s) => s.name).join(', ') || (student.subjects_needed || []).join(', ')} />
+          <InfoRow label="Bio" value={student.bio} />
+        </div>
+      </div>
     </div>
   );
 }

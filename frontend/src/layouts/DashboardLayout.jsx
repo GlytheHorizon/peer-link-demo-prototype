@@ -17,11 +17,14 @@ const NAV = {
   ],
   tutor: [
     { to: '/dashboard', label: 'Dashboard', icon: '▤' },
-    { to: '/profile', label: 'Profile', icon: '✎' },
-    { to: '/subjects', label: 'Subjects I Teach', icon: '☰' },
+    { to: '/students', label: 'My Student', icon: '☻' },
+    { to: '/sessions', label: 'Sessions', icon: '◷' },
     { to: '/messages', label: 'Messages', icon: '✉' },
-    { to: '/sessions', label: 'My Sessions', icon: '◷' },
-    { to: '/calendar', label: 'Calendar', icon: '▦' }
+    { to: '/resources', label: 'Resources', icon: '☷' },
+    { to: '/calendar', label: 'Calendar', icon: '▦' },
+    { to: '/earnings', label: 'Earnings', icon: '¤' },
+    { to: '/profile', label: 'Profile', icon: '✎' },
+    { to: '/verification', label: 'Verification', icon: '✓' }
   ],
   faculty: [
     { to: '/dashboard', label: 'Dashboard', icon: '▤' },

@@ -6,10 +6,11 @@ router.use(protect);
 
 router.get('/', c.listMine);
 router.post('/', c.createRequest);
+router.get('/conflicts', c.checkConflicts);
 router.get('/:id', c.getOne);
 router.delete('/:id', c.deleteRequest);
 router.patch('/:id/respond', c.respond);
-router.patch('/:id/complete', c.complete);
+router.post('/:id/complete-confirm', c.confirmComplete);
 router.patch('/:id/cancel', c.cancel);
   router.post('/:id/reschedule-requests', c.reschedule);
   router.get('/:id/reschedule-requests', c.listRescheduleRequests);

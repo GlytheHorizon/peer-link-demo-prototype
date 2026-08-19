@@ -38,15 +38,33 @@ const list = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/resources/folders — the Resources page payload.
- * Students only get folders for tutors they have sessions with (any status,
- * so completed sessions stay visible); tutors get their own folder; faculty
- * and admins get everything.
+ * Students only get folders for tutors they have a confirmed and paid session
+ * with (accepted + payment, or completed); tutors get their own folder;
+ * faculty and admins get everything.
  */
 const folders = asyncHandler(async (req, res) => {
   const role = req.user.role;
   let tutorUserIds = null;
   if (role === 'student') {
-    const rows = await query('SELECT DISTINCT s.tutor_id FROM sessions s WHERE s.student_id = ?', [req.user.id]);
+    const rows = await query(
+      `SELECT DISTINCT s.tutor_id
+       FROM sessions s
+       WHERE s.student_id = ?
+         AND (
+           s.status = 'completed'
+           OR (
+             s.status = 'accepted'
+             AND (
+               EXISTS (SELECT 1 FROM payments p WHERE p.session_id = s.id)
+               OR EXISTS (
+                 SELECT 1 FROM conversation_payments cp
+                 WHERE cp.conversation_id = s.conversation_id AND cp.status = 'accepted'
+               )
+             )
+           )
+         )`,
+      [req.user.id]
+    );
     tutorUserIds = new Set(rows.map((r) => Number(r.tutor_id)));
   } else if (role === 'tutor') {
     tutorUserIds = new Set([Number(req.user.id)]);

@@ -15,7 +15,7 @@ const getMyProfile = asyncHandler(async (req, res) => {
 /** PUT /api/students/me — update profile fields. */
 const updateMyProfile = asyncHandler(async (req, res) => {
   const {
-    year_level, course, bio, age, grade_level, school, strand,
+    year_level, course, bio, age, grade_level, school, strand, contact_no, gender,
     subjects_needed, learning_mode, preferred_schedule, preferred_time
   } = req.body;
   req.body.strand = req.body.strand === 'JHS (Grade 7-10)' ? 'JHS' : req.body.strand;
@@ -26,6 +26,8 @@ const updateMyProfile = asyncHandler(async (req, res) => {
     age: [v.intRange(10, 100, 'age')],
     grade_level: [v.maxLen(50)],
     school: [v.maxLen(150)],
+    contact_no: [v.maxLen(20)],
+    gender: [v.isIn(['Male', 'Female', 'Other'])],
     strand: [v.isIn(['STEM', 'GAS', 'ICT', 'ABM', 'HUMSS', 'JHS'])],
     learning_mode: [v.isIn(['online', 'face-to-face', 'both'])],
     preferred_time: [v.maxLen(60)]
@@ -33,7 +35,7 @@ const updateMyProfile = asyncHandler(async (req, res) => {
   const profile = await studentModel.findProfileByUserId(req.user.id);
   if (!profile) throw new ApiError(404, 'Student profile not found');
   await studentModel.updateProfile(req.user.id, {
-    year_level, course, bio, age, grade_level, school, strand,
+    year_level, course, bio, age, grade_level, school, strand, contact_no, gender,
     subjects_needed, learning_mode, preferred_schedule, preferred_time
   });
   log(req, 'student.profile_update', 'student_profile', profile.id);

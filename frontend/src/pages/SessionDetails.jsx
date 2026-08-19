@@ -4,6 +4,21 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { sessionService, evaluationService } from '../services';
 import { Spinner, Alert, StatusBadge, RatingStars, formatDateTime } from '../components/ui';
+import CancelSessionModal, { useCancelWindow, CancelCountdown } from '../components/CancelSessionModal';
+
+/** Student cancel control: active only during the 5-minute free-cancel window. */
+function StudentCancelDetails({ session, busy, onCancel }) {
+  const { active } = useCancelWindow(session);
+  if (!active) return null;
+  return (
+    <>
+      <CancelCountdown session={session} />
+      <button className="btn btn-danger btn-block" disabled={busy} onClick={onCancel}>
+        Cancel Session
+      </button>
+    </>
+  );
+}
 
 export default function SessionDetails() {
   const { id } = useParams();
@@ -19,6 +34,11 @@ export default function SessionDetails() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [evaluating, setEvaluating] = useState(false);
+
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
+
+  const [cancelling, setCancelling] = useState(false);
 
   const load = async () => {
     const res = await sessionService.get(id);
@@ -84,6 +104,12 @@ export default function SessionDetails() {
             <p><b>Tutor:</b> {session.tutor_name}</p>
             {session.topic && <p><b>Topic:</b> {session.topic}</p>}
             {session.notes && <p><b>Notes:</b> {session.notes}</p>}
+            {session.status === 'rejected' && session.reject_reason && (
+              <p><b>Rejection reason:</b> {session.reject_reason}</p>
+            )}
+            {session.status === 'cancelled' && (
+              <p><b>Cancelled:</b> {session.cancel_reason ? `${session.cancel_reason} — ` : ''}{formatDateTime(session.cancelled_at || session.updated_at)}</p>
+            )}
             <p className="muted small">Requested {formatDateTime(session.created_at)}</p>
           </div>
           <div className="session-actions">
@@ -99,53 +125,100 @@ export default function SessionDetails() {
                 >
                   Accept session
                 </button>
+                {!rejecting ? (
+                  <button
+                    className="btn btn-ghost btn-block"
+                    disabled={busy}
+                    onClick={() => setRejecting(true)}
+                  >
+                    Reject
+                  </button>
+                ) : (
+                  <div className="card" style={{ marginTop: 8, padding: 12 }}>
+                    <label className="muted small">Reason for rejecting (optional)</label>
+                    <textarea
+                      rows={3}
+                      value={rejectReason}
+                      maxLength={300}
+                      placeholder="Tell the student why you can't accept"
+                      onChange={(e) => setRejectReason(e.target.value)}
+                    />
+                    <button
+                      className="btn btn-danger btn-block"
+                      disabled={busy}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Reject session request?',
+                          message: `Reject the request from ${session.student_name}?${rejectReason.trim() ? ' They will see your reason.' : ''}`,
+                          confirmText: 'Reject',
+                          danger: true
+                        });
+                        if (ok) act(() => sessionService.respond(session.id, 'rejected', rejectReason.trim()));
+                      }}
+                    >
+                      Confirm rejection
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-block"
+                      disabled={busy}
+                      onClick={() => { setRejecting(false); setRejectReason(''); }}
+                    >
+                      Back
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {isTutor && session.status === 'accepted' && session.payment_id && (
+              <button
+                className="btn btn-primary btn-block"
+                disabled={busy || !!session.tutor_complete_confirmed_at}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Confirm session completed?',
+                    message: session.student_complete_confirmed_at
+                      ? `${session.student_name} already confirmed — completing will finalize the session.`
+                      : 'Confirm that this session was completed? It finalizes once the student confirms too, then they can rate you.',
+                    confirmText: 'Confirm completed'
+                  });
+                  if (ok) act(() => sessionService.confirmComplete(session.id));
+                }}
+              >
+                {session.tutor_complete_confirmed_at
+                  ? 'Waiting for the student to confirm…'
+                  : 'Confirm completion'}
+              </button>
+            )}
+            {isTutor && session.status === 'accepted' && !session.payment_id && (
+              <p className="muted small">Completion unlocks once the student pays and confirms in the chat.</p>
+            )}
+            {isStudent && session.status === 'pending' && (
+              <>
+                <StudentCancelDetails session={session} busy={busy} onCancel={() => setCancelling(true)} />
                 <button
-                  className="btn btn-ghost btn-block"
+                  className="btn btn-danger btn-block"
                   disabled={busy}
                   onClick={async () => {
-                    const ok = await confirm({ title: 'Reject session request?', message: `Reject the request from ${session.student_name}?`, confirmText: 'Reject', danger: true });
-                    if (ok) act(() => sessionService.respond(session.id, 'rejected'));
+                    const ok = await confirm({
+                      title: 'Delete session request?',
+                      message: 'Delete this session booking? It has not been confirmed by the tutor yet and will be removed permanently.',
+                      confirmText: 'Delete request',
+                      danger: true
+                    });
+                    if (!ok) return;
+                    setBusy(true);
+                    const res = await sessionService.remove(session.id);
+                    setBusy(false);
+                    if (res.ok) navigate('/sessions');
+                    else setErr(res.message);
                   }}
                 >
-                  Reject
+                  Delete request
                 </button>
               </>
             )}
-            {isTutor && session.status === 'accepted' && (
-              <button
-                className="btn btn-primary btn-block"
-                disabled={busy}
-                onClick={async () => {
-                  const ok = await confirm({ title: 'Mark session completed?', message: 'Mark this session as completed? The student can then rate you.', confirmText: 'Mark completed' });
-                  if (ok) act(() => sessionService.complete(session.id));
-                }}
-              >
-                Mark as completed
-              </button>
-            )}
-            {isStudent && session.status === 'pending' && (
-              <button
-                className="btn btn-danger btn-block"
-                disabled={busy}
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: 'Delete session request?',
-                    message: 'Delete this session booking? It has not been confirmed by the tutor yet and will be removed permanently.',
-                    confirmText: 'Delete request',
-                    danger: true
-                  });
-                  if (!ok) return;
-                  setBusy(true);
-                  const res = await sessionService.remove(session.id);
-                  setBusy(false);
-                  if (res.ok) navigate('/sessions');
-                  else setErr(res.message);
-                }}
-              >
-                Delete request
-              </button>
-            )}
-            {(isStudent || isTutor) && ['accepted'].includes(session.status) && (
+            {isTutor && ['accepted'].includes(session.status) && (
               <button
                 className="btn btn-ghost btn-block"
                 disabled={busy}
@@ -156,6 +229,9 @@ export default function SessionDetails() {
               >
                 Cancel session
               </button>
+            )}
+            {isStudent && ['accepted'].includes(session.status) && (
+              <StudentCancelDetails session={session} busy={busy} onCancel={() => setCancelling(true)} />
             )}
           </div>
         </div>
@@ -194,10 +270,18 @@ export default function SessionDetails() {
           <p className="muted">You already rated this session. Thank you!</p>
         )}
         {session.status !== 'completed' && (
-          <p className="muted">Evaluations unlock after the tutor marks the session as completed.</p>
+          <p className="muted">Evaluations unlock after the session is completed by both you and the tutor in the chat.</p>
         )}
         {isTutor && session.evaluation_id != null && <RatingStars rating={session.evaluation_rating} />}
       </div>
+
+      {cancelling && (
+        <CancelSessionModal
+          session={session}
+          onClose={() => setCancelling(false)}
+          onCancelled={(updated) => { setCancelling(false); setMsg({ type: 'success', text: 'Session cancelled' }); setSession(updated); }}
+        />
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
-import { subjectService, matchService } from '../services';
+import { subjectService, matchService, sessionService, conversationService } from '../services';
 import { Spinner, Alert, EmptyState } from '../components/ui';
 
 const CARD_VARIANTS = ['royal', 'sky', 'violet'];
@@ -11,6 +11,7 @@ export default function MatchingResults() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const subjects = useApi(subjectService.list);
+  const sessions = useApi(sessionService.list);
   const [mode, setMode] = useState('smart');
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState([]);
@@ -79,7 +80,31 @@ export default function MatchingResults() {
       message: `Book a ${subjectName(m.subject_id)} session with ${m.tutor_name}?`,
       confirmText: 'Book Session'
     });
-    if (ok) navigate(`/sessions/new?tutor=${m.tutor_profile_id}&subject=${m.subject_id}`);
+    if (ok) navigate(`/sessions/new?tutor=${m.tutor_user_id ?? m.tutor_profile_id}&subject=${m.subject_id}`);
+  };
+
+  const activeSessions = (sessions.data || []).filter(
+    (s) => s.status === 'pending' || s.status === 'accepted'
+  );
+
+  /** The student's active booking with this tutor for this subject, if any. */
+  const bookingFor = (m) =>
+    activeSessions.find(
+      (s) =>
+        Number(s.tutor_id) === Number(m.tutor_user_id ?? m.tutor_profile_id) &&
+        Number(s.subject_id) === Number(m.subject_id)
+    );
+
+  const chatTutor = async (m) => {
+    const b = bookingFor(m);
+    if (b?.conversation_id) {
+      navigate(`/messages/${b.conversation_id}`);
+      return;
+    }
+    const res = await conversationService.start(Number(m.tutor_user_id ?? m.tutor_profile_id), Number(m.subject_id));
+    if (res.ok && res.data?.id) navigate(`/messages/${res.data.id}`);
+    else if (res.ok) navigate('/messages');
+    else setErr(res.message);
   };
 
   const q = query.trim().toLowerCase();
@@ -198,12 +223,21 @@ export default function MatchingResults() {
             </div>
             <div className="req-actions">
               <Link className="req-btn req-btn--outline" to={`/tutors/${m.tutor_profile_id}`}>View Profile</Link>
-              <button
-                className="req-btn req-btn--book"
-                onClick={() => book(m)}
-              >
-                Book Session
-              </button>
+              {bookingFor(m) ? (
+                <>
+                  <span className="req-btn req-btn--booked">Already Booked</span>
+                  <button className="req-btn req-btn--outline" onClick={() => chatTutor(m)}>
+                    Chat Tutor
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="req-btn req-btn--book"
+                  onClick={() => book(m)}
+                >
+                  Book Session
+                </button>
+              )}
             </div>
           </div>
           );

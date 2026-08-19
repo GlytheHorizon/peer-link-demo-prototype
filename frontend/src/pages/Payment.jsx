@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { paymentService, conversationService } from '../services';
+import { paymentService } from '../services';
 import { Spinner, Alert, EmptyState, Modal, formatDateTime } from '../components/ui';
 
 const PAY_METHODS = [
@@ -24,75 +24,10 @@ function statusClass(status) {
   return 'st-paid';
 }
 
-function PayModal({ record, onClose, onDone }) {
-  const [amount, setAmount] = useState(record.amount != null ? record.amount : '');
-  const [reference, setReference] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    const res = await conversationService.pay(record.conversation_id, {
-      amount: amount !== '' ? Number(amount) : null,
-      reference: reference.trim() || null
-    });
-    setBusy(false);
-    if (res.ok) {
-      onDone();
-      onClose();
-    } else setErr(res.message);
-  };
-
-  return (
-    <Modal title={`Pay ${record.tutor_name}`} onClose={onClose}>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        {record.conversation_id ? (
-          <>Send payment evidence for your session with <b>{record.tutor_name}</b> — the tutor will confirm it in your conversation.</>
-        ) : (
-          <>Complete payment for the session with <b>{record.tutor_name}</b>.</>
-        )}
-      </p>
-      {err && <Alert type="error">{err}</Alert>}
-      <form className="form" onSubmit={submit}>
-        <label>Amount (₱)</label>
-        <input
-          type="number"
-          min="0"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount"
-          required
-        />
-        <label>Reference / proof (e.g. GCash ref)</label>
-        <input
-          value={reference}
-          onChange={(e) => setReference(e.target.value)}
-          placeholder="Reference or receipt number"
-          maxLength={150}
-          required
-        />
-        <button className="btn btn-primary btn-block" disabled={busy}>
-          {busy ? 'Sending…' : `Pay ₱${amount || 0}`}
-        </button>
-      </form>
-    </Modal>
-  );
-}
-
 export default function Payment() {
   const payments = useApi(paymentService.mine);
-  const [paying, setPaying] = useState(null);
   const [linking, setLinking] = useState(null);
   const [msg, setMsg] = useState(null);
-
-  const onDone = useCallback(() => {
-    payments.reload();
-    setMsg({ type: 'success', text: 'Payment submitted — the tutor will confirm it in your conversation.' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const stats = payments.data?.stats || {};
   const history = payments.data?.history || [];
@@ -151,13 +86,7 @@ export default function Payment() {
                           {STATUS_LABELS[p.status] || p.status}
                         </span>
                         {p.status === 'pending' && (
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm pay-now-btn"
-                            onClick={() => setPaying(p)}
-                          >
-                            Pay
-                          </button>
+                          <span className="muted small">Waiting for tutor confirmation</span>
                         )}
                       </td>
                     </tr>
@@ -187,9 +116,6 @@ export default function Payment() {
         </>
       )}
 
-      {paying && (
-        <PayModal record={paying} onClose={() => setPaying(null)} onDone={onDone} />
-      )}
       {linking && (
         <Modal title={`Link ${linking.label}`} onClose={() => setLinking(null)}>
           <p>

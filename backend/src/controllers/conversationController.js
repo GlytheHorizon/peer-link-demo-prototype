@@ -13,12 +13,15 @@ const listMine = asyncHandler(async (req, res) => {
   ok(res, 200, conversations);
 });
 
-/** POST /api/conversations — start/find a conversation on a subject.
- *  Students pass tutor_id; tutors pass student_id. */
+/** POST /api/conversations — start/find a conversation.
+ *  Students pass tutor_id; tutors pass student_id.
+ *  subject_id is optional (chats started from a profile have no subject). */
 const start = asyncHandler(async (req, res) => {
   const { tutor_id, student_id, subject_id } = req.body;
-  validate({ subject_id: [v.required('subject_id'), v.intRange(1, 1000000, 'subject id')] }, req.body);
-  if (!(await subjectModel.findById(subject_id))) throw new ApiError(404, 'Subject not found');
+  if (subject_id) {
+    validate({ subject_id: [v.intRange(1, 1000000, 'subject id')] }, req.body);
+    if (!(await subjectModel.findById(subject_id))) throw new ApiError(404, 'Subject not found');
+  }
   if (!['student', 'tutor'].includes(req.user.role)) {
     throw new ApiError(403, 'Only students and tutors can start conversations');
   }

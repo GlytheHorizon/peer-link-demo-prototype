@@ -76,9 +76,13 @@ export const sessionService = {
   list: () => apiFetch('/sessions'),
   get: (id) => apiFetch(`/sessions/${id}`),
   create: (payload) => apiFetch('/sessions', { method: 'POST', body: payload }),
-  respond: (id, decision) => apiFetch(`/sessions/${id}/respond`, { method: 'PATCH', body: { decision } }),
-  complete: (id) => apiFetch(`/sessions/${id}/complete`, { method: 'PATCH', body: {} }),
-  cancel: (id) => apiFetch(`/sessions/${id}/cancel`, { method: 'PATCH', body: {} }),
+  checkConflicts: (params) => {
+    const qs = toQuery(params);
+    return apiFetch(`/sessions/conflicts${qs ? `?${qs}` : ''}`);
+  },
+  respond: (id, decision, reason) => apiFetch(`/sessions/${id}/respond`, { method: 'PATCH', body: { decision, reason } }),
+  confirmComplete: (id) => apiFetch(`/sessions/${id}/complete-confirm`, { method: 'POST', body: {} }),
+  cancel: (id, reason) => apiFetch(`/sessions/${id}/cancel`, { method: 'PATCH', body: { reason } }),
   rescheduleRequests: {
     create: (id, payload) => apiFetch(`/sessions/${id}/reschedule-requests`, { method: 'POST', body: payload }),
     list: (id) => apiFetch(`/sessions/${id}/reschedule-requests`),

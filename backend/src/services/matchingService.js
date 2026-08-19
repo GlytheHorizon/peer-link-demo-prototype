@@ -199,6 +199,7 @@ async function browseTutors(subjectIds = null, nameQuery = null) {
       results.push({
         subject_id: entry.subject_id,
         tutor_profile_id: tutor.tutor_profile_id,
+        tutor_user_id: tutor.user_id,
         tutor_name: `${tutor.first_name} ${tutor.last_name}`,
         score: null,
         breakdown: null,

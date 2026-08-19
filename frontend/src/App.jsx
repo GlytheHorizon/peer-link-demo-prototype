@@ -24,6 +24,9 @@ import ActivityLogs from './pages/ActivityLogs';
 import Resources from './pages/Resources';
 import ComingSoon from './pages/ComingSoon';
 import Calendar from './pages/Calendar';
+import MyStudents from './pages/MyStudents';
+import Earnings from './pages/Earnings';
+import Verification from './pages/Verification';
 
 const shell = (roles, page) => (
   <ProtectedRoute roles={roles}>
@@ -62,6 +65,10 @@ export default function App() {
       <Route path="/resources" element={shell(null, <Resources />)} />
       <Route path="/calendar" element={shell(['student', 'tutor'], <Calendar />)} />
       <Route path="/payment" element={shell(['student'], <Payment />)} />
+
+      <Route path="/students" element={shell(['tutor'], <MyStudents />)} />
+      <Route path="/earnings" element={shell(['tutor'], <Earnings />)} />
+      <Route path="/verification" element={shell(['tutor'], <Verification />)} />
 
       <Route path="*" element={<Landing />} />
     </Routes>

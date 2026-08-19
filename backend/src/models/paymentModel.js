@@ -25,10 +25,11 @@ async function create({ sessionId, studentId, method, amount }) {
  * payment history: per-session payments + conversation clearance payments.
  */
 async function studentSummary(studentId) {
-  const [spent, pending, paidCount, convAccepted] = await Promise.all([
+  const [spent, pending, paidCount, convSpent, convCount] = await Promise.all([
     query(`SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE student_id = ? AND status = 'paid'`, [studentId]),
     query(`SELECT COALESCE(SUM(amount), 0) AS total FROM conversation_payments WHERE student_id = ? AND status = 'pending'`, [studentId]),
     query(`SELECT COUNT(*) AS total FROM payments WHERE student_id = ? AND status = 'paid'`, [studentId]),
+    query(`SELECT COALESCE(SUM(amount), 0) AS total FROM conversation_payments WHERE student_id = ? AND status = 'accepted'`, [studentId]),
     query(`SELECT COUNT(*) AS total FROM conversation_payments WHERE student_id = ? AND status = 'accepted'`, [studentId])
   ]);
   const history = await query(
@@ -51,9 +52,9 @@ async function studentSummary(studentId) {
   );
   return {
     stats: {
-      total_spent: Number(spent[0].total) || 0,
+      total_spent: (Number(spent[0].total) || 0) + (Number(convSpent[0].total) || 0),
       pending_total: Number(pending[0].total) || 0,
-      completed_count: Number(paidCount[0].total) + Number(convAccepted[0].total)
+      completed_count: Number(paidCount[0].total) + Number(convCount[0].total)
     },
     history
   };

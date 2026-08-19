@@ -11,16 +11,17 @@ async function findProfileByUserId(userId) {
   return rows[0] || null;
 }
 
-async function createProfile({ userId, year_level, course, bio, age, grade_level, school, strand, subjects_needed, learning_mode, preferred_schedule, preferred_time }, conn) {
+async function createProfile({ userId, year_level, course, bio, age, grade_level, school, strand, contact_no, gender, subjects_needed, learning_mode, preferred_schedule, preferred_time }, conn) {
   const values = [
     userId, year_level || null, course || null, bio || null,
     age || null, grade_level || null, school || null, strand || null,
+    contact_no || null, gender || null,
     subjects_needed ? JSON.stringify(subjects_needed) : null,
     learning_mode || null,
     preferred_schedule ? JSON.stringify(preferred_schedule) : null,
     preferred_time || null
   ];
-  const sql = 'INSERT INTO student_profiles (user_id, year_level, course, bio, age, grade_level, school, strand, subjects_needed, learning_mode, preferred_schedule, preferred_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  const sql = 'INSERT INTO student_profiles (user_id, year_level, course, bio, age, grade_level, school, strand, contact_no, gender, subjects_needed, learning_mode, preferred_schedule, preferred_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
   if (conn) {
     return (await qex(conn, sql, values)).insertId;
   }
@@ -31,6 +32,7 @@ async function createProfile({ userId, year_level, course, bio, age, grade_level
 async function updateProfile(userId, fields) {
   const allowed = [
     'year_level', 'course', 'bio', 'age', 'grade_level', 'school', 'strand',
+    'contact_no', 'gender',
     'subjects_needed', 'learning_mode', 'preferred_schedule', 'preferred_time'
   ];
   const sets = [];

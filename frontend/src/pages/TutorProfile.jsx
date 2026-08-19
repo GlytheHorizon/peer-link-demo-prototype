@@ -4,6 +4,19 @@ import { useConfirm } from '../context/ConfirmContext';
 import { tutorService, conversationService } from '../services';
 import { Spinner, Alert, RatingStars, formatDate, EmptyState } from '../components/ui';
 
+const initialsOf = (name) => (
+  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+);
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="info-row">
+      <span className="info-label">{label}</span>
+      <span className="info-value">{value || '—'}</span>
+    </div>
+  );
+}
+
 export default function TutorProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,14 +46,19 @@ export default function TutorProfile() {
   if (!tutor) return <EmptyState title="Tutor not found" action={<Link className="btn btn-primary" to="/matches">Back to matches</Link>} />;
 
   const startConversation = async () => {
-    if (!subjectId) { setMsg({ type: 'error', text: 'Pick a subject first' }); return; }
-    const ok = await confirm({ title: 'Start conversation?', message: `Start a conversation with ${tutor.full_name} about this subject?`, confirmText: 'Message tutor' });
+    const ok = await confirm({ title: 'Start conversation?', message: `Start a conversation with ${tutor.full_name}?`, confirmText: 'Message tutor' });
     if (!ok) return;
     setBusy(true);
-    const res = await conversationService.start(tutor.user_id, Number(subjectId));
+    const res = await conversationService.start(tutor.user_id, null);
     setBusy(false);
     if (res.ok) navigate(`/messages/${res.data.id}`);
     else setMsg({ type: 'error', text: res.message });
+  };
+
+  const bookSession = async () => {
+    if (!subjectId) { setMsg({ type: 'error', text: 'Pick a subject first' }); return; }
+    const ok = await confirm({ title: 'Schedule a session?', message: `Schedule a session with ${tutor.full_name} on this subject?`, confirmText: 'Schedule session' });
+    if (ok) navigate(`/sessions/new?tutor=${tutor.user_id}&subject=${subjectId}`);
   };
 
   const availability = tutor.availability || {};
@@ -49,65 +67,68 @@ export default function TutorProfile() {
     <div>
       <Link className="btn btn-ghost" to="/matches">← Back to matches</Link>
       {msg && <Alert type={msg.type}>{msg.text}</Alert>}
-      <div className="card tutor-profile">
-        <div className="tutor-head">
-          <div className="avatar">{tutor.full_name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</div>
-          <div>
-            <h2>{tutor.full_name}</h2>
-            <p className="muted">{tutor.email}</p>
-            <RatingStars rating={tutor.avg_rating} /> <span className="muted small">({tutor.rating_count} ratings)</span>
-          </div>
+      <div className="profile-header">
+        <div className="profile-avatar" aria-hidden="true">{initialsOf(tutor.full_name)}</div>
+        <div className="profile-identity">
+          <h3>{tutor.full_name}</h3>
+          <p className="profile-age">{tutor.email}</p>
+          <RatingStars rating={tutor.avg_rating} /> <span className="muted small">({tutor.rating_count} ratings)</span>
         </div>
-
-        <div className="grid-2">
-          <div>
-            <h4>About</h4>
-            <p>{tutor.bio || 'No bio yet.'}</p>
-            <p className="muted small">Course: {tutor.course || '—'} · Tutors up to Year {tutor.max_year_level || 5}</p>
-          </div>
-          <div>
-            <h4>Subjects taught</h4>
-            <div className="subject-tags">
-              {tutor.subjects.map((s) => (
-                <span key={s.id} className={`tag ${subjectId && Number(subjectId) === Number(s.id) ? 'tag-on' : ''}`}>
-                  {s.name} <b>· Proficiency {s.proficiency}/5</b> <b>· ₱{Number(s.rate_per_hour) || 100}/hr</b>
-                </span>
-              ))}
-            </div>
-            <h4>Weekly availability</h4>
-            <div className="day-picker">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-                <span key={d} className={`day-chip static ${availability[d] ? 'on' : ''}`}>{d}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="card-inner actions">
-          <label>Subject for this conversation</label>
-          <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
-            <option value="">Select subject…</option>
-            {tutor.subjects.map((s) => <option key={s.id} value={s.id}>{s.name} (Proficiency {s.proficiency}/5)</option>)}
-          </select>
-          <div className="row-actions">
-            <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
-              {busy ? 'Starting…' : 'Message this tutor'}
-            </button>
-            <button
-              className="btn btn-outline"
-              disabled={busy}
-              onClick={async () => {
-                if (!subjectId) { setMsg({ type: 'error', text: 'Pick a subject first' }); return; }
-                const ok = await confirm({ title: 'Schedule a session?', message: `Schedule a session with ${tutor.full_name} on this subject?`, confirmText: 'Schedule session' });
-                if (ok) navigate(`/sessions/new?tutor=${tutor.user_id}&subject=${subjectId}`);
-              }}
-            >
-              Schedule a session
-            </button>
-          </div>
+        <div className="profile-actions">
+          <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
+            {busy ? 'Starting…' : '✉ Chat'}
+          </button>
         </div>
       </div>
-      <p className="muted small">Member since {formatDate(tutor.created_at)}</p>
+
+      <div className="card profile-panel">
+        <h4>About</h4>
+        <div className="info-rows">
+          <InfoRow label="Bio" value={tutor.bio} />
+          <InfoRow label="Course" value={tutor.course} />
+          <InfoRow label="Max year level you can tutor" value={tutor.max_year_level ? `Year ${tutor.max_year_level}` : null} />
+          <InfoRow label="Learning mode" value={tutor.learning_mode} />
+          <InfoRow label="Preferred schedule" value={(tutor.preferred_schedule || []).join(', ')} />
+          <InfoRow label="Member since" value={formatDate(tutor.created_at)} />
+        </div>
+      </div>
+
+      <div className="card profile-panel">
+        <h4>Subjects taught</h4>
+        <div className="info-rows">
+          {tutor.subjects.length === 0 && <InfoRow label="Subjects" value="No subjects listed yet" />}
+          {tutor.subjects.map((s) => (
+            <InfoRow
+              key={s.id}
+              label={s.name}
+              value={`Proficiency ${s.proficiency}/5 · ₱${Number(s.rate_per_hour) || 100}/hr`}
+            />
+          ))}
+        </div>
+        <h4>Weekly availability</h4>
+        <div className="day-picker">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+            <span key={d} className={`day-chip static ${availability[d] ? 'on' : ''}`}>{d}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="card profile-panel">
+        <h4>Book a session</h4>
+        <div className="book-row">
+          <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} aria-label="Subject for the session">
+            <option value="">Select subject…</option>
+            {tutor.subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} (Proficiency {s.proficiency}/5 · ₱{Number(s.rate_per_hour) || 100}/hr)
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-outline" onClick={bookSession} disabled={busy}>
+            Book session
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

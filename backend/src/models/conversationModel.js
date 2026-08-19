@@ -2,7 +2,7 @@ const { query } = require('../config/db');
 
 async function findOrCreate({ studentId, tutorId, subjectId }) {
   const existing = await query(
-    `SELECT * FROM conversations WHERE student_id = ? AND tutor_id = ? AND subject_id = ?`,
+    `SELECT * FROM conversations WHERE student_id = ? AND tutor_id = ? AND subject_id IS NOT DISTINCT FROM ?`,
     [studentId, tutorId, subjectId]
   );
   if (existing[0]) return existing[0];
@@ -22,7 +22,7 @@ async function findById(id) {
             st.last_seen_at AS student_last_seen_at,
             tt.last_seen_at AS tutor_last_seen_at
      FROM conversations c
-     JOIN subjects s ON s.id = c.subject_id
+     LEFT JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
      JOIN users tt ON tt.id = c.tutor_id
      WHERE c.id = ?`,
@@ -42,11 +42,13 @@ async function listForUser(userId) {
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id <> ? AND m.is_read = FALSE) AS unread_count,
             (SELECT m.body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS last_message
      FROM conversations c
-     JOIN subjects s ON s.id = c.subject_id
+     LEFT JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
      JOIN users tt ON tt.id = c.tutor_id
      WHERE (c.student_id = ? OR c.tutor_id = ?)
        AND (c.deleted_by IS NULL OR c.deleted_by <> ?)
+       AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)
+            OR EXISTS (SELECT 1 FROM conversation_payments cp WHERE cp.conversation_id = c.id))
      ORDER BY c.updated_at DESC`,
     [userId, userId, userId, userId]
   );

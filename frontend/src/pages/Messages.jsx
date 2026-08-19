@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
-import { conversationService, userService } from '../services';
+import { conversationService, sessionService, userService, evaluationService } from '../services';
 import { Spinner, Alert, formatDateTime, EmptyState } from '../components/ui';
+import RescheduleModal from '../components/RescheduleModal';
 
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
 const PRESENCE_POLL_MS = 30 * 1000;
@@ -56,133 +57,97 @@ function OnlineStatus({ online }) {
   );
 }
 
-/** Payment / clearance box shown above the composer. */
-function PaymentBox({ conversationId, conv, user }) {
+/** Payment / clearance card rendered inside the conversation thread. */
+function PaymentCard({ payment, conv, user, session, onChanged }) {
   const confirm = useConfirm();
-  const isTutor = conv.tutor_id === user.id || user.role_key === 'tutor';
-  const isStudent = user.role_key === 'student';
-  const [payments, setPayments] = useState([]);
-  const [err, setErr] = useState(null);
-  const [paying, setPaying] = useState(false);
-  const [form, setForm] = useState({ amount: '', reference: '' });
+  const isTutor = conv.tutor_id === user.id;
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [err, setErr] = useState(null);
+  const [rescheduling, setRescheduling] = useState(null);
 
-  const load = async () => {
-    const res = await conversationService.payments(conversationId);
-    if (res.ok) setPayments(res.data);
-    else setErr(res.message);
-  };
-
-  useEffect(() => { load(); }, [conversationId]);
-
-  const latest = payments[0] || null;
-
-  const send = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    const res = await conversationService.pay(conversationId, {
-      amount: form.amount,
-      reference: form.reference
-    });
-    setBusy(false);
-    if (res.ok) {
-      setForm({ amount: '', reference: '' });
-      setPaying(false);
-      load();
-    } else setErr(res.message);
-  };
+  const amount = payment.amount ? `₱${Number(payment.amount).toLocaleString()}` : null;
 
   const accept = async () => {
     const ok = await confirm({
       title: 'Confirm payment?',
-      message: `Clear this payment${latest.amount ? ` of ₱${latest.amount}` : ''}?`,
+      message: `Clear this payment${amount ? ` of ${amount}` : ''}?`,
       confirmText: 'Accept payment'
     });
     if (!ok) return;
     setBusy(true);
-    const res = await conversationService.acceptPayment(conversationId, latest.id);
+    setErr(null);
+    const res = await conversationService.acceptPayment(conv.id, payment.id);
     setBusy(false);
-    if (res.ok) load();
+    if (res.ok) onChanged();
     else setErr(res.message);
   };
 
   const reject = async () => {
     const ok = await confirm({
       title: 'Reject payment?',
-      message: 'Rejecting lets the student send a new payment.',
+      message: 'Rejecting lets the student pay again from My Sessions.',
       confirmText: 'Reject',
       danger: true
     });
     if (!ok) return;
     setBusy(true);
-    const res = await conversationService.rejectPayment(conversationId, latest.id, reason);
+    setErr(null);
+    const res = await conversationService.rejectPayment(conv.id, payment.id, reason);
     setBusy(false);
-    if (res.ok) { setRejecting(false); setReason(''); load(); }
+    if (res.ok) { setRejecting(false); setReason(''); onChanged(); }
     else setErr(res.message);
   };
 
-  const summary = (p) => (
-    <span className="muted small">
-      {p.amount ? <>₱{p.amount} · </> : null}{p.reference ? `${p.reference} · ` : ''}{formatDateTime(p.created_at)}
-    </span>
-  );
+  const badge = {
+    pending: ['badge-pending', 'Pending'],
+    accepted: ['badge-accepted', 'Accepted'],
+    rejected: ['badge-rejected', 'Rejected']
+  }[payment.status] || ['', payment.status];
 
-  let body;
-  if (!latest || latest.status === 'rejected') {
-    body = (
-      <>
+  return (
+    <div className="msg-row payment-row">
+      <div className={`payment-card payment-${payment.status}`}>
         <div className="payment-head">
-          <b>{latest ? 'Payment rejected' : 'Send payment for clearance'}</b>
-          {latest && <span className="badge badge-rejected">Rejected</span>}
+          <b>
+            {payment.status === 'pending'
+              ? (isTutor ? 'Payment received from ' + payment.student_name : 'Payment sent')
+              : payment.status === 'accepted' ? 'Payment accepted' : 'Payment rejected'}
+          </b>
+          <span className={`badge ${badge[0]}`}>{badge[1]}</span>
         </div>
-        {latest && latest.reject_reason && <p className="muted small">Reason: {latest.reject_reason}</p>}
-        {latest && summary(latest)}
-        {isStudent && !paying && (
-          <div className="row-actions">
-            <button className="btn btn-outline btn-sm" onClick={() => setPaying(true)}>
-              {latest ? 'Make payment again' : 'I have paid'}
-            </button>
-          </div>
+        <p className="payment-detail muted small">
+          {amount ? <>{amount} · </> : null}
+          {payment.reference ? <>{payment.reference} · </> : null}
+          {formatDateTime(payment.created_at)}
+        </p>
+        {payment.status === 'pending' && (
+          <p className="payment-note">
+            {isTutor
+              ? 'Waiting for your confirmation — accept or reject the payment below.'
+              : 'Waiting for the tutor to accept the payment.'}
+          </p>
         )}
-        {isStudent && paying && (
-          <form className="payment-form" onSubmit={send}>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="Amount (optional)"
-            />
-            <input
-              value={form.reference}
-              onChange={(e) => setForm({ ...form, reference: e.target.value })}
-              placeholder="Reference / proof (e.g. GCash ref)"
-              maxLength={150}
-            />
-            <button className="btn btn-primary btn-sm" disabled={busy}>{busy ? 'Sending…' : 'Send payment'}</button>
-          </form>
+        {payment.status === 'rejected' && payment.reject_reason && (
+          <p className="muted small">Reason: {payment.reject_reason}</p>
         )}
-      </>
-    );
-  } else if (latest.status === 'pending') {
-    body = (
-      <>
-        <div className="payment-head">
-          <b>{isTutor ? 'Payment awaiting your confirmation' : 'Payment sent — waiting for the tutor'}</b>
-          <span className="badge badge-pending">Pending</span>
-        </div>
-        {summary(latest)}
-        {isTutor && (
+        {payment.status === 'rejected' && !isTutor && (
+          <p className="payment-note">You can send a new payment from <Link to="/sessions">My Sessions</Link>.</p>
+        )}
+        {payment.status === 'accepted' && (
+          <p className="payment-note">
+            Payment cleared — the session is confirmed{session ? '. You can reschedule if needed.' : '.'}
+          </p>
+        )}
+        {err && <Alert type="error">{err}</Alert>}
+        {isTutor && payment.status === 'pending' && (
           <div className="row-actions">
             <button className="btn btn-primary btn-sm" onClick={accept} disabled={busy}>Accept</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setRejecting(!rejecting)}>Reject</button>
           </div>
         )}
-        {isTutor && rejecting && (
+        {isTutor && payment.status === 'pending' && rejecting && (
           <div className="payment-form">
             <textarea
               rows="2"
@@ -194,63 +159,73 @@ function PaymentBox({ conversationId, conv, user }) {
             <button className="btn btn-danger btn-sm" onClick={reject} disabled={busy}>Reject payment</button>
           </div>
         )}
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <div className="payment-head">
-          <b>Payment cleared</b>
-          <span className="badge badge-completed">Accepted</span>
-        </div>
-        {summary(latest)}
-      </>
-    );
-  }
-
-  return (
-    <div className={`payment-box payment-${latest ? latest.status : 'none'}`}>
-      {err && <Alert type="error">{err}</Alert>}
-      {body}
+        {payment.status === 'accepted' && session && (
+          <div className="row-actions">
+            <button className="btn btn-outline btn-sm" onClick={() => setRescheduling(session)}>
+              Reschedule session
+            </button>
+          </div>
+        )}
+        {rescheduling && (
+          <RescheduleModal
+            session={rescheduling}
+            otherUserId={user.id === session.student_id ? session.tutor_id : session.student_id}
+            onClose={() => setRescheduling(null)}
+            onSent={onChanged}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
-/** Right-hand chat panel: header, message list, payment box, composer. */
+/** Right-hand chat panel: header, message list, composer. */
 function Thread({ conversationId, onChanged }) {
   const { user } = useAuth();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [conv, setConv] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
   const endRef = useRef(null);
+  const cancelledRef = useRef(false);
+
+  const load = useCallback(async () => {
+    const [c, m, p] = await Promise.all([
+      conversationService.get(conversationId),
+      conversationService.getMessages(conversationId),
+      conversationService.payments(conversationId)
+    ]);
+    if (cancelledRef.current) return;
+    if (c.ok) setConv(c.data); else setErr(c.message);
+    if (m.ok) setMessages(m.data); else setErr(m.message);
+    if (p.ok) setPayments(p.data); else setErr(p.message);
+    const sres = await sessionService.list();
+    if (!cancelledRef.current && sres.ok) setSessions(sres.data);
+    setLoading(false);
+  }, [conversationId]);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      const [c, m] = await Promise.all([
-        conversationService.get(conversationId),
-        conversationService.getMessages(conversationId)
-      ]);
-      if (cancelled) return;
-      if (c.ok) setConv(c.data); else setErr(c.message);
-      if (m.ok) setMessages(m.data); else setErr(m.message);
-      setLoading(false);
-    };
+    cancelledRef.current = false;
     setLoading(true);
     setErr(null);
     load();
     const timer = setInterval(load, PRESENCE_POLL_MS);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [conversationId]);
+    return () => { cancelledRef.current = true; clearInterval(timer); };
+  }, [load]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, payments]);
 
   const send = async (e) => {
     e.preventDefault();
@@ -295,47 +270,185 @@ function Thread({ conversationId, onChanged }) {
     } else setErr(res.message);
   };
 
+  const confirmCompletion = async () => {
+    if (!session) return;
+    const ok = await confirm({
+      title: 'Confirm session completed?',
+      message: otherConfirmed
+        ? `${otherName} already confirmed on their side — confirming will complete the session for both of you.`
+        : 'Confirm that this session was completed? It finalizes once the other participant confirms too.',
+      confirmText: 'Confirm completed'
+    });
+    if (!ok) return;
+    setCompleting(true);
+    const res = await sessionService.confirmComplete(session.id);
+    setCompleting(false);
+    if (res.ok) {
+      await load();
+      onChanged?.();
+    } else setErr(res.message);
+  };
+
+  const submitEvaluation = async (e) => {
+    e.preventDefault();
+    if (!session) return;
+    const ok = await confirm({
+      title: 'Submit evaluation?',
+      message: `Submit your ${rating}/5 rating of ${conv ? otherName : 'the tutor'} for this session?`,
+      confirmText: 'Submit evaluation'
+    });
+    if (!ok) return;
+    setEvaluating(true);
+    const res = await evaluationService.create(session.id, rating, comment);
+    setEvaluating(false);
+    if (res.ok) {
+      setRating(5);
+      setComment('');
+      await load();
+      onChanged?.();
+    } else setErr(res.message);
+  };
+
+  const entries = useMemo(() => {
+    const msgs = messages.map((m) => ({ kind: 'message', ts: new Date(m.created_at).getTime(), key: `m-${m.id}`, item: m }));
+    const pays = payments.map((p) => ({ kind: 'payment', ts: new Date(p.created_at).getTime(), key: `p-${p.id}`, item: p }));
+    return [...msgs, ...pays].sort((a, b) => a.ts - b.ts);
+  }, [messages, payments]);
+
   if (loading) return <div className="chat-loading"><Spinner /></div>;
 
-  const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.student_name);
+const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.student_name);
   const online = isOnline(conv, user);
+  const session = (conv && sessions.find((s) => Number(s.conversation_id) === Number(conv.id))) || null;
+  const isTutor = !!conv && Number(conv.tutor_id) === Number(user.id);
+  const isStudent = !!conv && Number(conv.student_id) === Number(user.id);
+  const paid = !!session?.payment_id;
+  const iConfirmed = session && (isTutor ? session.tutor_complete_confirmed_at : session.student_complete_confirmed_at);
+  const otherConfirmed = session && (isTutor ? session.student_complete_confirmed_at : session.tutor_complete_confirmed_at);
+  const canComplete = paid && !!session && session.status === 'accepted';
 
   return (
     <div className="chat">
+      {canComplete && (
+        iConfirmed && !otherConfirmed ? (
+          <span className="chat-complete-fab chat-complete-fab--waiting">Waiting for {otherName} to confirm…</span>
+        ) : (
+          <button
+            type="button"
+            className="chat-complete-fab"
+            onClick={confirmCompletion}
+            disabled={completing}
+          >
+            {completing ? 'Confirming…' : '✓ Complete Session'}
+          </button>
+        )
+      )}
       <div className="chat-head">
         <Link className="btn btn-ghost back-link" to="/messages">← Back</Link>
         <MiniAvatar name={otherName} />
         <div className="chat-head-info">
           <div className="chat-head-name">
-            <b>{otherName || 'Conversation'}</b>
+            <b>{conv ? `[${conv.subject_name}] ${otherName}` : (otherName || 'Conversation')}</b>
             <OnlineStatus online={online} />
           </div>
-          <span className="muted small">{conv ? conv.subject_name : ''}</span>
         </div>
-        <button type="button" className="btn btn-ghost btn-sm chat-delete" onClick={removeConversation}>Delete</button>
+        <button
+          type="button"
+          className="chat-delete"
+          onClick={removeConversation}
+          title="Delete conversation"
+          aria-label="Delete conversation"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+        </button>
       </div>
       {err && <Alert type="error">{err}</Alert>}
       <div className="chat-body">
+        {session?.status === 'completed' && isStudent && session.evaluation_id == null && (
+          <div className="msg-complete-eval">
+            <b>Session completed — rate your tutor</b>
+            <p className="muted small">Your rating appears on the tutor's profile.</p>
+            <form className="msg-complete-eval-form" onSubmit={submitEvaluation}>
+              <div className="rating-picker">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    type="button"
+                    key={n}
+                    className={`star-btn ${n <= rating ? 'on' : ''}`}
+                    onClick={() => setRating(n)}
+                    aria-label={`${n} star${n === 1 ? '' : 's'}`}
+                  >
+                    ★
+                  </button>
+                ))}
+                <span className="muted small">{rating}/5</span>
+              </div>
+              <textarea
+                rows="2"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="How was the session?"
+                maxLength={2000}
+              />
+              <button className="btn btn-primary btn-sm" disabled={evaluating}>
+                {evaluating ? 'Submitting…' : 'Submit rating'}
+              </button>
+            </form>
+          </div>
+        )}
+        {session?.status === 'completed' && (
+          (isStudent && session.evaluation_id != null) || isTutor
+        ) && (
+          <div className="msg-complete-banner">
+            <b>✓ Session completed</b>
+            {session.evaluation_id != null && (
+              <span className="muted small"> — rated {Number(session.evaluation_rating).toFixed(1)}/5{isStudent ? ' — thank you!' : ' by the student'}</span>
+            )}
+          </div>
+        )}
         {messages.length === 0 && <p className="muted center">No messages yet — say hello!</p>}
-        {messages.map((m) => {
-          const mine = m.sender_id === user.id;
-          return (
-            <div key={m.id} className={`msg-row ${mine ? 'mine' : ''}`}>
-              <div className={`bubble ${mine ? 'mine' : ''}`}>
+        {payments.length === 0 && (
+          <div className="payment-hint">
+            {user.role_key === 'student' ? (
+              <span>Pay for the session in <Link to="/sessions">My Sessions</Link> — the payment will appear here for the tutor to confirm.</span>
+            ) : session ? (
+              <span>When the student pays for the session, the payment will appear here for you to confirm.</span>
+            ) : (
+              <span>No session is linked to this conversation yet.</span>
+            )}
+          </div>
+        )}
+        {entries.map((e) => (
+          e.kind === 'message' ? (
+            <div key={e.key} className={`msg-row ${e.item.sender_id === user.id ? 'mine' : ''}`}>
+              <div className={`bubble ${e.item.sender_id === user.id ? 'mine' : ''}`}>
                 <div className="bubble-meta">
-                  <span className="muted small">{mine ? 'You' : m.sender_name} · {formatDateTime(m.created_at)}</span>
-                  {mine && (
-                    <button type="button" className="unsend-btn" onClick={() => unsend(m)} title="Unsend message">Unsend</button>
+                  <span className="muted small">{e.item.sender_id === user.id ? 'You' : e.item.sender_name} · {formatDateTime(e.item.created_at)}</span>
+                  {e.item.sender_id === user.id && (
+                    <button type="button" className="unsend-btn" onClick={() => unsend(e.item)} title="Unsend message">Unsend</button>
                   )}
                 </div>
-                <p>{m.body}</p>
+                <p>{e.item.body}</p>
               </div>
             </div>
-          );
-        })}
+          ) : (
+            <PaymentCard
+              key={e.key}
+              payment={e.item}
+              conv={conv}
+              user={user}
+              session={session}
+              onChanged={load}
+            />
+          )
+        ))}
         <div ref={endRef} />
       </div>
-      {conv && <PaymentBox conversationId={conversationId} conv={conv} user={user} />}
       <form className="composer" onSubmit={send}>
         <button type="button" className="mic-btn" title="Voice message" aria-label="Voice message">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -438,7 +551,7 @@ export default function Messages() {
                 <MiniAvatar name={other} />
                 <div className="msg-item-main">
                   <div className="msg-item-top">
-                    <b className="msg-item-name truncate">{other}</b>
+                    <b className="msg-item-name truncate">{c.subject_name ? `[${c.subject_name}] ` : ''}{other}</b>
                     <OnlineStatus online={isOnline(c, user)} />
                     <span className="msg-time">{timeAgo(c.updated_at)}</span>
                   </div>
