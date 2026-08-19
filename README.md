@@ -305,3 +305,7 @@ Student selects tutor → select subject → date/time → request
 - Input validation before any DB access; safe, generic error messages
 - CORS limited to `CLIENT_URL`; secrets only via `.env` (never committed)
 - Admins cannot modify or delete their own account (enforced in `adminController`)
+
+## Known Issues
+
+- Vercel deployment may return 500 errors on auth endpoints (`/api/auth/login`) due to PostgreSQL connection pool incompatibility with Vercel's serverless functions. Works fine in local development. See: `backend/src/config/db.js` — consider using per-request connections for Vercel compatibility.
