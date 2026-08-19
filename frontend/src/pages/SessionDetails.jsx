@@ -223,7 +223,8 @@ export default function SessionDetails() {
                 className="btn btn-ghost btn-block"
                 disabled={busy}
                 onClick={async () => {
-                  const ok = await confirm({ title: 'Cancel session?', message: 'Cancel this session? This cannot be undone.', confirmText: 'Cancel session', danger: true });
+                  const paid = session.payment_id ? ` This session has already been paid${session.payment_amount ? ` (₱${Number(session.payment_amount).toLocaleString()})` : ''} — there is no refund.` : '';
+                  const ok = await confirm({ title: 'Cancel session?', message: `Cancel this session?${paid} This cannot be undone.`, confirmText: 'Cancel session', danger: true });
                   if (ok) act(() => sessionService.cancel(session.id));
                 }}
               >

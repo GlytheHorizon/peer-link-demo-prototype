@@ -106,9 +106,20 @@ function TutorSessionCard({
         <div className="sc-top">
           <b className="sc-name">{s.student_name}</b>
           <span className={`pill ${meta.cls}`}>{statusLabel}</span>
+          {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
+            <span className="pill pill--pending">Payment request</span>
+          )}
           {s.status === 'completed' && rating && <span className="sc-rating">★ {rating}</span>}
         </div>
         <div className="sc-sub">{dateLabel} · {timeLabel}</div>
+        {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
+          <p className="sc-note sc-note--amber">
+            Student sent a payment request —{' '}
+            <button type="button" className="sc-note-link" onClick={() => onChat(s)}>
+              check your messages to confirm
+            </button>
+          </p>
+        )}
         {hasPendingReq && (
           <p className={`sc-note ${myRequest ? 'sc-note--amber' : ''}`}>
             {myRequest ? 'Awaiting confirmation for reschedule' : 'Reschedule requested'}
@@ -424,9 +435,10 @@ export default function Sessions() {
   const chatStudent = async (s) => openSessionChat(s, 'tutor');
 
   const cancelSession = async (s) => {
+    const paid = s.payment_id ? ` This session has already been paid${s.payment_amount ? ` (₱${Number(s.payment_amount).toLocaleString()})` : ''} — there is no refund.` : '';
     const ok = await confirm({
       title: 'Cancel session?',
-      message: `Cancel the ${s.subject_name} session with ${s.tutor_name || s.student_name}?`,
+      message: `Cancel the ${s.subject_name} session with ${s.tutor_name || s.student_name}?${paid}`,
       confirmText: 'Cancel session'
     });
     if (!ok) return;

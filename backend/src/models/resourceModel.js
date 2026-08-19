@@ -1,10 +1,10 @@
 const { query } = require('../config/db');
 
-async function create({ tutorId, subjectId, title, fileType, sizeBytes }) {
+async function create({ tutorId, subjectId, title, fileName, fileType, sizeBytes, description }) {
   const result = await query(
-    `INSERT INTO resources (tutor_id, subject_id, title, file_type, size_bytes)
-     VALUES (?, ?, ?, ?, ?)`,
-    [tutorId, subjectId || null, title, fileType, sizeBytes || null]
+    `INSERT INTO resources (tutor_id, subject_id, title, file_name, file_type, size_bytes, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [tutorId, subjectId || null, title, fileName || null, fileType, sizeBytes || null, description || null]
   );
   return findById(result.insertId);
 }

@@ -198,6 +198,8 @@ function Thread({ conversationId, onChanged }) {
   const [comment, setComment] = useState('');
   const endRef = useRef(null);
   const cancelledRef = useRef(false);
+  const menuRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [c, m, p] = await Promise.all([
@@ -226,6 +228,22 @@ function Thread({ conversationId, onChanged }) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, payments]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const send = async (e) => {
     e.preventDefault();
@@ -326,23 +344,10 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
   const iConfirmed = session && (isTutor ? session.tutor_complete_confirmed_at : session.student_complete_confirmed_at);
   const otherConfirmed = session && (isTutor ? session.student_complete_confirmed_at : session.tutor_complete_confirmed_at);
   const canComplete = paid && !!session && session.status === 'accepted';
+  const completionRequested = canComplete && otherConfirmed && !iConfirmed;
 
   return (
     <div className="chat">
-      {canComplete && (
-        iConfirmed && !otherConfirmed ? (
-          <span className="chat-complete-fab chat-complete-fab--waiting">Waiting for {otherName} to confirm…</span>
-        ) : (
-          <button
-            type="button"
-            className="chat-complete-fab"
-            onClick={confirmCompletion}
-            disabled={completing}
-          >
-            {completing ? 'Confirming…' : '✓ Complete Session'}
-          </button>
-        )
-      )}
       <div className="chat-head">
         <Link className="btn btn-ghost back-link" to="/messages">← Back</Link>
         <MiniAvatar name={otherName} />
@@ -352,23 +357,65 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
             <OnlineStatus online={online} />
           </div>
         </div>
-        <button
-          type="button"
-          className="chat-delete"
-          onClick={removeConversation}
-          title="Delete conversation"
-          aria-label="Delete conversation"
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <line x1="10" y1="11" x2="10" y2="17" />
-            <line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
-        </button>
+        <div className="chat-head-actions" ref={menuRef}>
+          <button
+            type="button"
+            className={`chat-menu-btn ${menuOpen ? 'open' : ''}`}
+            onClick={() => setMenuOpen((v) => !v)}
+            title="Conversation settings"
+            aria-label="Conversation settings"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div className="chat-menu" role="menu">
+              {canComplete && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="chat-menu-item"
+                  onClick={() => { setMenuOpen(false); confirmCompletion(); }}
+                  disabled={completing || (iConfirmed && !otherConfirmed)}
+                >
+                  {iConfirmed && !otherConfirmed
+                    ? `Waiting for ${otherName} to confirm…`
+                    : (completionRequested ? 'Confirm session completed' : 'Request to mark the session as done')}
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                className="chat-menu-item chat-menu-item--danger"
+                onClick={() => { setMenuOpen(false); removeConversation(); }}
+              >
+                Delete conversation
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {err && <Alert type="error">{err}</Alert>}
       <div className="chat-body">
+        {completionRequested && (
+          <div className="msg-complete-request">
+            <b>{otherName} has confirmed this session is completed</b>
+            <p className="muted small">Accept on your side to finalize the session for both of you.</p>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={confirmCompletion}
+              disabled={completing}
+            >
+              {completing ? 'Confirming…' : 'Confirm completed'}
+            </button>
+          </div>
+        )}
         {session?.status === 'completed' && isStudent && session.evaluation_id == null && (
           <div className="msg-complete-eval">
             <b>Session completed — rate your tutor</b>

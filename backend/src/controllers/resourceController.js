@@ -6,10 +6,10 @@ const tutorModel = require('../models/tutorModel');
 const { query } = require('../config/db');
 const log = require('../services/activityLogService').log;
 
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'resources');
+const UPLOAD_DIR = path.join(__dirname, '..', '..', '..', 'uploads', 'resources');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const MAX_BYTES = 25 * 1024 * 1024;
+const MAX_BYTES = 500 * 1024 * 1024;
 
 const TYPE_BY_EXT = {
   pdf: 'PDF',
@@ -22,13 +22,15 @@ const TYPE_BY_EXT = {
   txt: 'TEXT', md: 'TEXT'
 };
 
+const ALLOWED_TYPES = new Set(Object.values(TYPE_BY_EXT));
+
 /** Keeps only safe filename characters; used for the on-disk name. */
 function sanitizeName(name) {
   return String(name).replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '.').slice(0, 200);
 }
 
 function diskPathFor(resource) {
-  return path.join(UPLOAD_DIR, `${resource.id}_${sanitizeName(resource.title)}`);
+  return path.join(UPLOAD_DIR, `${resource.id}_${sanitizeName(resource.file_name || resource.title)}`);
 }
 
 /** GET /api/resources — every resource with its tutor (any authenticated role). */
@@ -78,22 +80,30 @@ const folders = asyncHandler(async (req, res) => {
   ok(res, 200, { tutors, resources: await resourceModel.listAll() });
 });
 
-/** POST /api/resources — tutor uploads a resource (JSON body: title, data[base64], subject_id?). */
+/** POST /api/resources — tutor uploads a resource (JSON body: title, file_name, data[base64], subject_id?, file_type?, description?). */
 const upload = asyncHandler(async (req, res) => {
   if (req.user.role !== 'tutor') throw new ApiError(403, 'Only tutors can upload resources');
 
-  const { title, data, subject_id } = req.body;
-  if (!title || typeof title !== 'string') throw new ApiError(400, 'File name is required');
+  const { title, file_name, data, subject_id, file_type, description } = req.body;
+  if (!title || typeof title !== 'string') throw new ApiError(400, 'Resource title is required');
   if (!data || typeof data !== 'string') throw new ApiError(400, 'File data is required');
+
+  const fileName = (file_name && String(file_name)) || title;
+  const ext = path.extname(fileName).replace('.', '').toLowerCase();
+  const derivedType = TYPE_BY_EXT[ext];
+  if (!derivedType) throw new ApiError(400, `Unsupported file type "${ext || 'none'}"`);
+
+  let fileType = file_type && String(file_type).toUpperCase();
+  if (fileType) {
+    if (!ALLOWED_TYPES.has(fileType)) throw new ApiError(400, `Unsupported resource type "${fileType}"`);
+  } else {
+    fileType = derivedType;
+  }
 
   const base64 = data.includes('base64,') ? data.split('base64,')[1] : data;
   const buffer = Buffer.from(base64, 'base64');
   if (!buffer.length) throw new ApiError(400, 'File data is empty');
-  if (buffer.length > MAX_BYTES) throw new ApiError(413, 'Files are limited to 25 MB');
-
-  const ext = path.extname(title).replace('.', '').toLowerCase();
-  const fileType = TYPE_BY_EXT[ext];
-  if (!fileType) throw new ApiError(400, `Unsupported file type "${ext || 'none'}"`);
+  if (buffer.length > MAX_BYTES) throw new ApiError(413, 'Files are limited to 500 MB');
 
   if (subject_id != null && subject_id !== '') {
     const profile = await tutorModel.findProfileByUserId(req.user.id);
@@ -107,8 +117,10 @@ const upload = asyncHandler(async (req, res) => {
     tutorId: req.user.id,
     subjectId: subject_id ? Number(subject_id) : null,
     title: title.slice(0, 255),
+    fileName: fileName.slice(0, 255),
     fileType,
-    sizeBytes: buffer.length
+    sizeBytes: buffer.length,
+    description: description ? String(description).slice(0, 500) : null
   });
 
   try {
@@ -118,7 +130,7 @@ const upload = asyncHandler(async (req, res) => {
     throw new ApiError(500, 'Could not save the file on disk');
   }
 
-  log(req, 'resource.upload', 'resource', resource.id, { title: resource.title, size: buffer.length });
+  log(req, 'resource.upload', 'resource', resource.id, { title: resource.title, fileName: resource.file_name, size: buffer.length });
   ok(res, 201, resource, 'Resource uploaded');
 });
 

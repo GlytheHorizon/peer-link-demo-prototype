@@ -5,8 +5,11 @@ const SESSION_SELECT = `
          CONCAT(stu.first_name, ' ', stu.last_name) AS student_name, stu.email AS student_email,
          CONCAT(tut.first_name, ' ', tut.last_name) AS tutor_name, tut.email AS tutor_email,
          e.id AS evaluation_id, e.rating AS evaluation_rating,
-         COALESCE(p.id, cp.id) AS payment_id, p.method AS payment_method, p.amount AS payment_amount, p.created_at AS paid_at,
-         cp2.id AS pending_payment_id,
+         COALESCE(p.id, cp.id) AS payment_id, p.method AS payment_method,
+         COALESCE(p.amount, cp.amount) AS payment_amount,
+         COALESCE(p.status, cp.status) AS payment_status,
+         COALESCE(p.created_at, cp.created_at) AS paid_at,
+         cp2.id AS pending_payment_id, cp2.amount AS pending_amount, cp2.created_at AS pending_at,
          tsr.rate_per_hour, s.reject_reason, s.cancel_reason,
          rr.id AS reschedule_request_id, rr.requester_id AS reschedule_requester_id,
          rr.proposed_start AS reschedule_start, rr.proposed_end AS reschedule_end, rr.reason AS reschedule_reason
@@ -19,13 +22,13 @@ const SESSION_SELECT = `
   LEFT JOIN evaluations e ON e.session_id = s.id
   LEFT JOIN payments p ON p.session_id = s.id
   LEFT JOIN LATERAL (
-    SELECT id
+    SELECT id, amount, status, created_at
     FROM conversation_payments
     WHERE conversation_id = s.conversation_id AND status = 'accepted'
     ORDER BY id DESC LIMIT 1
   ) cp ON TRUE
   LEFT JOIN LATERAL (
-    SELECT id
+    SELECT id, amount, status, created_at
     FROM conversation_payments
     WHERE conversation_id = s.conversation_id AND status = 'pending'
     ORDER BY id DESC LIMIT 1

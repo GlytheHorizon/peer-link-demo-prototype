@@ -65,6 +65,13 @@ export default function CancelSessionModal({ session, onClose, onCancelled }) {
           <div className="pay-row"><span>When</span><b>{new Date(session.scheduled_start).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</b></div>
         </div>
 
+        {session.payment_id && (
+          <div className="no-refund-warning">
+            <b>Payment already received — no refund</b>
+            <p>This session has already been paid{Number(session.payment_amount) ? ` (₱${Number(session.payment_amount).toLocaleString()})` : ''} — cancelling will not issue a refund.</p>
+          </div>
+        )}
+
         <label>Why are you cancelling this session?</label>
         <div className="cancel-reasons">
           {REASONS.map((r) => (

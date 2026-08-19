@@ -330,9 +330,12 @@ function TutorProfile() {
   const [tagInput, setTagInput] = useState('');
   const [time, setTime] = useState('');
   const [customTime, setCustomTime] = useState('');
+  const [allSubjects, setAllSubjects] = useState([]);
+  const [subjectMap, setSubjectMap] = useState({});
+  const [subjectQuery, setSubjectQuery] = useState('');
 
   const load = async () => {
-    const res = await tutorService.getMe();
+    const [res, catalog] = await Promise.all([tutorService.getMe(), subjectService.list()]);
     if (res.ok) {
       setProfile(res.data);
       setDays((res.data.availability || {}));
@@ -341,7 +344,13 @@ function TutorProfile() {
       const t = res.data.preferred_time || '';
       setTime(TIME_OPTIONS.includes(t) ? t : t ? 'Custom time' : '');
       setCustomTime(TIME_OPTIONS.includes(t) ? '' : t);
+      const map = {};
+      for (const s of res.data.subjects || []) {
+        map[s.id] = { proficiency: s.proficiency || 3, rate_per_hour: s.rate_per_hour ?? 100 };
+      }
+      setSubjectMap(map);
     } else setErr(res.message);
+    if (catalog.ok) setAllSubjects(catalog.data);
   };
 
   useEffect(() => {
@@ -372,31 +381,76 @@ function TutorProfile() {
     setTagInput('');
   };
 
+  const toggleSubject = (id) => {
+    setSubjectMap((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = { proficiency: 3, rate_per_hour: 100 };
+      return next;
+    });
+  };
+
+  const updateSubjectField = (id, field, value) => {
+    setSubjectMap((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
+
+  const subjectQueryLower = subjectQuery.trim().toLowerCase();
+  const visibleSubjects = allSubjects
+    .filter((s) => {
+      if (!subjectQueryLower) return true;
+      return (
+        s.name.toLowerCase().includes(subjectQueryLower) ||
+        s.code.toLowerCase().includes(subjectQueryLower) ||
+        (s.strand || '').toLowerCase().includes(subjectQueryLower) ||
+        (STRAND_LABELS[s.strand] || '').toLowerCase().includes(subjectQueryLower)
+      );
+    })
+    .sort((a, b) => {
+      const aSel = subjectMap[a.id] ? 0 : 1;
+      const bSel = subjectMap[b.id] ? 0 : 1;
+      return aSel - bSel;
+    });
+
   const submit = async (e) => {
     e.preventDefault();
+    if (Object.keys(subjectMap).length === 0) {
+      setErr('Pick at least one subject you can teach');
+      return;
+    }
+    const subjects = Object.entries(subjectMap).map(([id, d]) => ({
+      subject_id: Number(id),
+      proficiency: Math.min(5, Math.max(1, Number(d.proficiency) || 3)),
+      rate_per_hour: Math.max(0, Number(d.rate_per_hour) || 0)
+    }));
     const ok = await confirm({ title: 'Save profile?', message: 'Save your profile changes?', confirmText: 'Save profile' });
     if (!ok) return;
     setBusy(true);
     setMsg(null);
     setErr(null);
-    const res = await tutorService.updateMe({
-      course: e.target.course.value,
-      max_year_level: Number(e.target.max_year.value),
-      bio: e.target.bio.value,
-      availability: days,
-      age: e.target.age.value ? Number(e.target.age.value) : undefined,
-      grade_level: e.target.grade_level.value || undefined,
-      school: e.target.school.value || undefined,
-      strand: e.target.strand.value || undefined,
-      contact_no: e.target.contact_no.value || undefined,
-      gender: e.target.gender.value || undefined,
-      learning_mode: e.target.learning_mode.value || undefined,
-      preferred_schedule: prefDays,
-      preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined,
-      tags
-    });
+    const [res, subjRes] = await Promise.all([
+      tutorService.updateMe({
+        course: e.target.course.value,
+        max_year_level: Number(e.target.max_year.value),
+        bio: e.target.bio.value,
+        availability: days,
+        age: e.target.age.value ? Number(e.target.age.value) : undefined,
+        grade_level: e.target.grade_level.value || undefined,
+        school: e.target.school.value || undefined,
+        strand: e.target.strand.value || undefined,
+        contact_no: e.target.contact_no.value || undefined,
+        gender: e.target.gender.value || undefined,
+        learning_mode: e.target.learning_mode.value || undefined,
+        preferred_schedule: prefDays,
+        preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined,
+        tags
+      }),
+      tutorService.setSubjects(subjects)
+    ]);
     setBusy(false);
-    if (res.ok) {
+    if (res.ok && subjRes.ok) {
       setMsg({ type: 'success', text: res.message });
       setProfile(res.data);
       setEditing(false);
@@ -406,7 +460,13 @@ function TutorProfile() {
       const t = res.data.preferred_time || '';
       setTime(TIME_OPTIONS.includes(t) ? t : t ? 'Custom time' : '');
       setCustomTime(TIME_OPTIONS.includes(t) ? '' : t);
-    } else setErr(res.message);
+      const map = {};
+      for (const s of subjRes.data.subjects || []) {
+        map[s.id] = { proficiency: s.proficiency || 3, rate_per_hour: s.rate_per_hour ?? 100 };
+      }
+      setSubjectMap(map);
+    } else if (!res.ok) setErr(res.message);
+    else setErr(subjRes.message);
   };
 
   if (!profile && !err) return <Spinner />;
@@ -444,7 +504,7 @@ function TutorProfile() {
             if (!days.length) return null;
             return days.map((d) => `${d}: ${(av[d] || []).join(', ')}`).join(' · ');
           })() },
-          { label: 'Subjects taught', value: (profile.subjects || []).map((s) => s.name).join(', ') },
+          { label: 'Subjects taught', value: (profile.subjects || []).map((s) => `${s.name} (Proficiency ${s.proficiency}/5 · ₱${Number(s.rate_per_hour) || 100}/hr)`).join(', ') },
           { label: 'Tags', value: joinList(profile.tags) },
           { label: 'Bio', value: profile.bio }
         ]}
@@ -497,6 +557,78 @@ function TutorProfile() {
             )}
             <label>Bio (optional)</label>
             <textarea name="bio" rows="4" defaultValue={profile.bio || ''} placeholder="Share your teaching style and strengths…" />
+
+            <h5 className="form-section-title">Subjects you teach</h5>
+            <label>Subjects I can teach <span className="muted small">— set proficiency and hourly rate for each</span></label>
+            <div className="subject-search-wrap">
+              <input
+                type="search"
+                className="subject-search"
+                placeholder="Search subjects by name, code or strand…"
+                value={subjectQuery}
+                onChange={(e) => setSubjectQuery(e.target.value)}
+                aria-label="Search subjects"
+              />
+              {subjectQuery && (
+                <button type="button" className="search-clear" onClick={() => setSubjectQuery('')} aria-label="Clear search">×</button>
+              )}
+            </div>
+            <div className="subject-editor">
+              {allSubjects.length === 0 && (
+                <p className="muted small" style={{ padding: '6px 4px' }}>No subjects in the catalog yet — ask an administrator to add subjects.</p>
+              )}
+              {allSubjects.length > 0 && visibleSubjects.length === 0 && (
+                <p className="muted small" style={{ padding: '6px 4px' }}>No subjects match “{subjectQuery.trim()}”.</p>
+              )}
+              {visibleSubjects.map((s) => {
+                const on = !!subjectMap[s.id];
+                const d = subjectMap[s.id] || { proficiency: 3, rate_per_hour: 100 };
+                return (
+                  <div key={s.id} className={`subject-editor-row ${on ? 'on' : ''}`}>
+                    <button
+                      type="button"
+                      className="subject-editor-toggle"
+                      onClick={() => toggleSubject(s.id)}
+                      aria-pressed={on}
+                    >
+                      <span className="subject-editor-check">{on ? '✓' : ''}</span>
+                      <span className="subject-editor-name">{s.name}</span>
+                      {s.strand && <span className="chip-strand"> · {STRAND_LABELS[s.strand] || s.strand}</span>}
+                    </button>
+                    {on && (
+                      <div className="subject-editor-fields">
+                        <div>
+                          <label>Proficiency</label>
+                          <select
+                            value={d.proficiency}
+                            onChange={(e) => updateSubjectField(s.id, 'proficiency', e.target.value)}
+                          >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <option key={n} value={n}>
+                                {n} — {n === 1 ? 'Beginner' : n === 2 ? 'Basic' : n === 3 ? 'Intermediate' : n === 4 ? 'Advanced' : 'Expert'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label>Rate per hour (₱)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100000"
+                            step="10"
+                            value={d.rate_per_hour}
+                            onChange={(e) => updateSubjectField(s.id, 'rate_per_hour', e.target.value)}
+                            placeholder="e.g. 150"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="muted small">Tip: pick the subjects you teach — students book sessions at your hourly rate (selected: {Object.keys(subjectMap).length}).</p>
 
             <label>Weekly availability (days you can hold sessions)</label>
             <div className="day-picker">
