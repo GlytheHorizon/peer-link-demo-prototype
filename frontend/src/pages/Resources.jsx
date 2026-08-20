@@ -338,14 +338,18 @@ function ResourceRow({ r, isOwn, onDelete }) {
 export default function Resources() {
   const { user } = useAuth();
   const confirm = useConfirm();
+  const isTutor = user.role_key === 'tutor';
   const data = useApi(resourceService.folders);
-  const mySubjects = useApi(tutorService.getSubjects);
+  const mySubjects = useApi(
+    isTutor
+      ? tutorService.getSubjects
+      : () => Promise.resolve({ ok: true, data: [] })
+  );
   const [query, setQuery] = useState('');
   const [openTutorIds, setOpenTutorIds] = useState(new Set());
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const isTutor = user.role_key === 'tutor';
   const isAdmin = user.role_key === 'admin';
   const q = query.trim().toLowerCase();
 

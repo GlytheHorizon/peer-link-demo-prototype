@@ -2,20 +2,21 @@ const { query } = require('../config/db');
 
 async function listByConversation(conversationId) {
   return query(
-    `SELECT m.id, m.conversation_id, m.sender_id, m.body, m.is_read, m.created_at,
-            CONCAT(u.first_name, ' ', u.last_name) AS sender_name
+    `SELECT m.id, m.conversation_id, m.sender_id, m.body, m.is_read, m.is_system, m.created_at,
+            CASE WHEN m.sender_id IS NULL THEN NULL
+                 ELSE CONCAT(u.first_name, ' ', u.last_name) END AS sender_name
      FROM messages m
-     JOIN users u ON u.id = m.sender_id
+     LEFT JOIN users u ON u.id = m.sender_id
      WHERE m.conversation_id = ?
      ORDER BY m.created_at ASC, m.id ASC`,
     [conversationId]
   );
 }
 
-async function create({ conversationId, senderId, body }) {
+async function create({ conversationId, senderId = null, body, isSystem = false }) {
   const result = await query(
-    'INSERT INTO messages (conversation_id, sender_id, body) VALUES (?, ?, ?)',
-    [conversationId, senderId, body]
+    'INSERT INTO messages (conversation_id, sender_id, body, is_system) VALUES (?, ?, ?, ?)',
+    [conversationId, senderId, body, isSystem]
   );
   return result.insertId;
 }
@@ -48,4 +49,13 @@ async function remove(id) {
   return result.affectedRows;
 }
 
-module.exports = { listByConversation, create, markConversationRead, countUnreadForUser, findById, remove };
+/** True when a "Session Completed" system message already exists for the conversation. */
+async function hasCompletionMessage(conversationId) {
+  const rows = await query(
+    'SELECT id FROM messages WHERE conversation_id = ? AND is_system = TRUE AND body LIKE \'Session Completed%\' LIMIT 1',
+    [conversationId]
+  );
+  return rows.length > 0;
+}
+
+module.exports = { listByConversation, create, markConversationRead, countUnreadForUser, findById, remove, hasCompletionMessage };

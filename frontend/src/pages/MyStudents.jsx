@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
 import { sessionService, conversationService } from '../services';
@@ -169,7 +169,7 @@ export default function MyStudents() {
           <div className="req-card-top">
             <span className="req-avatar">{initials(s.student_name)}</span>
             <div className="req-main">
-              <b className="req-name">{s.student_name}</b>
+              <Link className="req-name" to={`/students/${s.student_id}`}>{s.student_name}</Link>
               <span className="req-subject req-subject--blue">{s.subject_name}</span>
               <span className="req-schedule">{scheduleLabel(s)}</span>
             </div>
@@ -200,7 +200,7 @@ export default function MyStudents() {
           <div className="student-card" key={st.student_id}>
             <span className="req-avatar">{initials(st.name)}</span>
             <div className="req-main">
-              <b className="req-name">{st.name}</b>
+              <Link className="req-name" to={`/students/${st.student_id}`}>{st.name}</Link>
               <div className="student-sub-row">
                 {st.subjects.map((sub, i) => (
                   <React.Fragment key={sub.name}>

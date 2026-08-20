@@ -301,10 +301,9 @@ function Thread({ conversationId, onChanged }) {
     setCompleting(true);
     const res = await sessionService.confirmComplete(session.id);
     setCompleting(false);
-    if (res.ok) {
-      await load();
-      onChanged?.();
-    } else setErr(res.message);
+    await load();
+    onChanged?.();
+    if (!res.ok && res.status !== 409) setErr(res.message);
   };
 
   const submitEvaluation = async (e) => {
@@ -353,9 +352,22 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
         <MiniAvatar name={otherName} />
         <div className="chat-head-info">
           <div className="chat-head-name">
-            <b>{conv ? `[${conv.subject_name}] ${otherName}` : (otherName || 'Conversation')}</b>
-            <OnlineStatus online={online} />
+            {conv && <span className="chat-head-subject truncate">{conv.subject_name}</span>}
+            <b className="truncate">
+              {otherName ? (
+                <span
+                  className="msg-item-profile-link"
+                  onClick={() => {
+                    const to = isTutor ? `/students/${conv.student_id}` : `/tutors/${conv.tutor_id}`;
+                    navigate(to);
+                  }}
+                >
+                  {otherName}
+                </span>
+              ) : 'Conversation'}
+            </b>
           </div>
+          <OnlineStatus online={online} />
         </div>
         <div className="chat-head-actions" ref={menuRef}>
           <button
@@ -453,8 +465,10 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
         ) && (
           <div className="msg-complete-banner">
             <b>✓ Session completed</b>
-            {session.evaluation_id != null && (
+            {session.evaluation_id != null ? (
               <span className="muted small"> — rated {Number(session.evaluation_rating).toFixed(1)}/5{isStudent ? ' — thank you!' : ' by the student'}</span>
+            ) : (
+              <span className="muted small"> — waiting for the student's evaluation</span>
             )}
           </div>
         )}
@@ -472,17 +486,24 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
         )}
         {entries.map((e) => (
           e.kind === 'message' ? (
-            <div key={e.key} className={`msg-row ${e.item.sender_id === user.id ? 'mine' : ''}`}>
-              <div className={`bubble ${e.item.sender_id === user.id ? 'mine' : ''}`}>
-                <div className="bubble-meta">
-                  <span className="muted small">{e.item.sender_id === user.id ? 'You' : e.item.sender_name} · {formatDateTime(e.item.created_at)}</span>
-                  {e.item.sender_id === user.id && (
-                    <button type="button" className="unsend-btn" onClick={() => unsend(e.item)} title="Unsend message">Unsend</button>
-                  )}
-                </div>
-                <p>{e.item.body}</p>
+            e.item.is_system ? (
+              <div key={e.key} className="msg-system">
+                <span className="msg-system-text">{e.item.body}</span>
+                <span className="muted small">{formatDateTime(e.item.created_at)}</span>
               </div>
-            </div>
+            ) : (
+              <div key={e.key} className={`msg-row ${e.item.sender_id === user.id ? 'mine' : ''}`}>
+                <div className={`bubble ${e.item.sender_id === user.id ? 'mine' : ''}`}>
+                  <div className="bubble-meta">
+                    <span className="muted small">{e.item.sender_id === user.id ? 'You' : e.item.sender_name} · {formatDateTime(e.item.created_at)}</span>
+                    {e.item.sender_id === user.id && (
+                      <button type="button" className="unsend-btn" onClick={() => unsend(e.item)} title="Unsend message">Unsend</button>
+                    )}
+                  </div>
+                  <p>{e.item.body}</p>
+                </div>
+              </div>
+            )
           ) : (
             <PaymentCard
               key={e.key}
@@ -593,12 +614,25 @@ export default function Messages() {
           {filtered.map((c) => {
             const active = String(c.id) === String(id);
             const other = c.student_id === user.id ? c.tutor_name : c.student_name;
+            const otherProfile = c.student_id === user.id ? `/tutors/${c.tutor_id}` : `/students/${c.student_id}`;
             return (
               <Link key={c.id} to={`/messages/${c.id}`} className={`msg-item ${active ? 'active' : ''}`}>
                 <MiniAvatar name={other} />
                 <div className="msg-item-main">
                   <div className="msg-item-top">
-                    <b className="msg-item-name truncate">{c.subject_name ? `[${c.subject_name}] ` : ''}{other}</b>
+                    <b className="msg-item-name">
+                      {c.subject_name && <span className="msg-item-subject truncate">{c.subject_name}</span>}
+                      <span
+                        className="msg-item-profile-link truncate"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(otherProfile);
+                        }}
+                      >
+                        {other}
+                      </span>
+                    </b>
                     <OnlineStatus online={isOnline(c, user)} />
                     <span className="msg-time">{timeAgo(c.updated_at)}</span>
                   </div>

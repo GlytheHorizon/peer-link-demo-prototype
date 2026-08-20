@@ -20,8 +20,8 @@ const searchSubjects = asyncHandler(async (req, res) => {
 const createSubject = asyncHandler(async (req, res) => {
   const { code, name, description, strand } = req.body;
   validate({
-    code: [v.required('code'), v.maxLen(20)],
-    name: [v.required('name'), v.maxLen(150)],
+    code: [v.required('code'), v.minLen(1, 'non-empty'), v.maxLen(20)],
+    name: [v.required('name'), v.minLen(1, 'non-empty'), v.maxLen(150)],
     strand: [v.isIn(['STEM', 'GAS', 'ICT', 'ABM', 'HUMSS', 'JHS'], 'strand')]
   }, req.body);
   if (await subjectModel.findByCode(code)) {
@@ -39,8 +39,8 @@ const updateSubject = asyncHandler(async (req, res) => {
   if (!subject) throw new ApiError(404, 'Subject not found');
   const { code, name, description, strand } = req.body;
   validate({
-    code: [v.maxLen(20)],
-    name: [v.maxLen(150)],
+    code: [v.minLen(1, 'non-empty'), v.maxLen(20)],
+    name: [v.minLen(1, 'non-empty'), v.maxLen(150)],
     strand: [v.isIn(['STEM', 'GAS', 'ICT', 'ABM', 'HUMSS', 'JHS'], 'strand')]
   }, req.body);
   if (code && (await subjectModel.findByCode(code)) && (await subjectModel.findByCode(code)).id !== id) {

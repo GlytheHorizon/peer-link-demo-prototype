@@ -47,9 +47,10 @@ const list = asyncHandler(async (req, res) => {
 const folders = asyncHandler(async (req, res) => {
   const role = req.user.role;
   let tutorUserIds = null;
+  let subjectIds = null;
   if (role === 'student') {
     const rows = await query(
-      `SELECT DISTINCT s.tutor_id
+      `SELECT DISTINCT s.tutor_id, s.subject_id
        FROM sessions s
        WHERE s.student_id = ?
          AND (
@@ -68,6 +69,7 @@ const folders = asyncHandler(async (req, res) => {
       [req.user.id]
     );
     tutorUserIds = new Set(rows.map((r) => Number(r.tutor_id)));
+    subjectIds = new Set(rows.map((r) => Number(r.subject_id)));
   } else if (role === 'tutor') {
     tutorUserIds = new Set([Number(req.user.id)]);
   }
@@ -77,7 +79,12 @@ const folders = asyncHandler(async (req, res) => {
     ? allTutors.filter((t) => tutorUserIds.has(Number(t.user_id)))
     : allTutors;
 
-  ok(res, 200, { tutors, resources: await resourceModel.listAll() });
+  let resources = await resourceModel.listAll();
+  if (subjectIds) {
+    resources = resources.filter((r) => subjectIds.has(Number(r.subject_id)) || r.subject_id == null);
+  }
+
+  ok(res, 200, { tutors, resources });
 });
 
 /** POST /api/resources — tutor uploads a resource (JSON body: title, file_name, data[base64], subject_id?, file_type?, description?). */

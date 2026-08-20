@@ -7,6 +7,7 @@ const conversationModel = require('../models/conversationModel');
 const paymentModel = require('../models/paymentModel');
 const conversationPaymentModel = require('../models/conversationPaymentModel');
 const rescheduleRequestModel = require('../models/rescheduleRequestModel');
+const messageModel = require('../models/messageModel');
 const log = require('../services/activityLogService').log;
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
@@ -137,6 +138,17 @@ const respond = asyncHandler(async (req, res) => {
   ok(res, 200, await sessionModel.findById(session.id), decision === 'accepted' ? 'Session confirmed' : 'Session rejected');
 });
 
+/** Posts the "Session Completed" system message once per conversation. */
+async function addCompletionMessage(conversationId) {
+  if (!conversationId) return;
+  if (await messageModel.hasCompletionMessage(conversationId)) return;
+  await messageModel.create({
+    conversationId,
+    body: 'Session Completed',
+    isSystem: true
+  });
+}
+
 /** POST /api/sessions/:id/complete-confirm — a participant confirms the session
  *  was completed. The session only becomes 'completed' once BOTH the student
  *  and the tutor have confirmed; students can then rate/evaluate the tutor. */
@@ -153,16 +165,29 @@ const confirmComplete = asyncHandler(async (req, res) => {
   }
 
   const isStudent = session.student_id === req.user.id;
-  if (isStudent && session.student_complete_confirmed_at) {
-    throw new ApiError(409, 'You already confirmed this session — waiting for the tutor');
+  const myConfirmed = isStudent ? session.student_complete_confirmed_at : session.tutor_complete_confirmed_at;
+  const otherConfirmed = isStudent ? session.tutor_complete_confirmed_at : session.student_complete_confirmed_at;
+
+  // Both sides already confirmed but the status never flipped (older bug).
+  // Finish it now so the student can rate and both sides get the message.
+  if (myConfirmed && otherConfirmed) {
+    await sessionModel.forceComplete(session.id);
+    const updated = await sessionModel.findById(session.id);
+    await addCompletionMessage(session.conversation_id);
+    log(req, 'session.complete', 'session', session.id, { by: isStudent ? 'student' : 'tutor', healed: true });
+    return ok(res, 200, updated, 'Session completed — the student can now rate your session');
   }
-  if (!isStudent && session.tutor_complete_confirmed_at) {
-    throw new ApiError(409, 'You already confirmed this session — waiting for the student');
+
+  if (myConfirmed) {
+    throw new ApiError(409, 'You already confirmed this session — waiting for the other participant to confirm');
   }
 
   await sessionModel.confirmCompletion(session.id, isStudent ? 'student' : 'tutor');
   const updated = await sessionModel.findById(session.id);
   const completedNow = updated.status === 'completed';
+  if (completedNow) {
+    await addCompletionMessage(session.conversation_id);
+  }
   log(req, completedNow ? 'session.complete' : 'session.complete_confirm', 'session', session.id, { by: isStudent ? 'student' : 'tutor' });
   ok(res, 200, updated, completedNow
     ? 'Session completed — the student can now rate your session'
@@ -183,6 +208,9 @@ const cancel = asyncHandler(async (req, res) => {
   }
   if (session.status === 'completed' || session.status === 'cancelled') {
     throw new ApiError(409, `Session is already ${session.status}`);
+  }
+  if (session.payment_id || session.pending_payment_id) {
+    throw new ApiError(409, 'This session has already been paid — it can no longer be cancelled. End it by confirming completion instead.');
   }
   if (req.user.id === session.student_id) {
     const windowMs = new Date(session.created_at).getTime() + SESSION_CANCEL_WINDOW_MS - Date.now();
@@ -343,9 +371,12 @@ const pay = asyncHandler(async (req, res) => {
   if (existing) throw new ApiError(409, 'Session is already paid');
 
   if (session.conversation_id) {
-    const convPayments = await conversationPaymentModel.listByConversation(session.conversation_id);
+    const convPayments = await conversationPaymentModel.listBySession(session.id);
     if (convPayments.some((p) => p.status === 'accepted')) {
       throw new ApiError(409, 'Session is already paid');
+    }
+    if (convPayments.some((p) => p.status === 'pending')) {
+      throw new ApiError(409, 'You already have a pending payment for this session — wait for the tutor to confirm it');
     }
   }
 
@@ -382,11 +413,9 @@ const pay = asyncHandler(async (req, res) => {
   let payment;
   let message = 'Payment recorded — your session is confirmed';
   if (session.conversation_id) {
-    if (await conversationPaymentModel.hasPending(session.conversation_id)) {
-      throw new ApiError(409, 'You already have a pending payment in the conversation — wait for the tutor to confirm it');
-    }
     payment = await conversationPaymentModel.create({
       conversationId: session.conversation_id,
+      sessionId: session.id,
       studentId: req.user.id,
       tutorId: session.tutor_id,
       amount,

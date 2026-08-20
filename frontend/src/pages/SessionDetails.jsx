@@ -218,20 +218,19 @@ export default function SessionDetails() {
                 </button>
               </>
             )}
-            {isTutor && ['accepted'].includes(session.status) && (
+            {isTutor && ['accepted'].includes(session.status) && !session.payment_id && (
               <button
                 className="btn btn-ghost btn-block"
                 disabled={busy}
                 onClick={async () => {
-                  const paid = session.payment_id ? ` This session has already been paid${session.payment_amount ? ` (₱${Number(session.payment_amount).toLocaleString()})` : ''} — there is no refund.` : '';
-                  const ok = await confirm({ title: 'Cancel session?', message: `Cancel this session?${paid} This cannot be undone.`, confirmText: 'Cancel session', danger: true });
+                  const ok = await confirm({ title: 'Cancel session?', message: 'Cancel this session? This cannot be undone.', confirmText: 'Cancel session', danger: true });
                   if (ok) act(() => sessionService.cancel(session.id));
                 }}
               >
                 Cancel session
               </button>
             )}
-            {isStudent && ['accepted'].includes(session.status) && (
+            {isStudent && ['accepted'].includes(session.status) && !session.payment_id && (
               <StudentCancelDetails session={session} busy={busy} onCancel={() => setCancelling(true)} />
             )}
           </div>

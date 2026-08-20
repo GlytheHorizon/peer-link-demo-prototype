@@ -24,13 +24,13 @@ const SESSION_SELECT = `
   LEFT JOIN LATERAL (
     SELECT id, amount, status, created_at
     FROM conversation_payments
-    WHERE conversation_id = s.conversation_id AND status = 'accepted'
+    WHERE session_id = s.id AND status = 'accepted'
     ORDER BY id DESC LIMIT 1
   ) cp ON TRUE
   LEFT JOIN LATERAL (
     SELECT id, amount, status, created_at
     FROM conversation_payments
-    WHERE conversation_id = s.conversation_id AND status = 'pending'
+    WHERE session_id = s.id AND status = 'pending'
     ORDER BY id DESC LIMIT 1
   ) cp2 ON TRUE
   LEFT JOIN LATERAL (
@@ -90,12 +90,12 @@ async function cancel(id, reason = null) {
  */
 async function confirmCompletion(id, side) {
   const column = side === 'student' ? 'student_complete_confirmed_at' : 'tutor_complete_confirmed_at';
+  const other = side === 'student' ? 'tutor_complete_confirmed_at' : 'student_complete_confirmed_at';
   await query(
     `UPDATE sessions
      SET ${column} = now(),
          status = CASE
-           WHEN student_complete_confirmed_at IS NOT NULL
-            AND tutor_complete_confirmed_at IS NOT NULL THEN 'completed'
+           WHEN ${other} IS NOT NULL THEN 'completed'
            ELSE status
          END
      WHERE id = ?`,
@@ -105,6 +105,12 @@ async function confirmCompletion(id, side) {
 
 async function updateSchedule(id, scheduledStart, scheduledEnd) {
   await query('UPDATE sessions SET scheduled_start = ?, scheduled_end = ? WHERE id = ?', [scheduledStart, scheduledEnd, id]);
+}
+
+/** Forces a session to 'completed'. Used to heal sessions where both sides
+ *  confirmed under an older buggy version but the status never flipped. */
+async function forceComplete(id) {
+  await query('UPDATE sessions SET status = ? WHERE id = ?', ['completed', id]);
 }
 
 /** Hard-deletes a session row (payments/evaluations cascade). Only used for unconfirmed requests. */
@@ -159,4 +165,4 @@ async function countBetween(start, end) {
   return rows[0].total;
 }
 
-module.exports = { findById, create, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };
+module.exports = { findById, create, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, forceComplete, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };

@@ -8,10 +8,10 @@ function selectWithNames() {
             JOIN users t ON t.id = p.tutor_id`;
 }
 
-async function create({ conversationId, studentId, tutorId, amount, reference }) {
+async function create({ conversationId, sessionId = null, studentId, tutorId, amount, reference }) {
   const result = await query(
-    'INSERT INTO conversation_payments (conversation_id, student_id, tutor_id, amount, reference) VALUES (?, ?, ?, ?, ?)',
-    [conversationId, studentId, tutorId, amount, reference || null]
+    'INSERT INTO conversation_payments (conversation_id, session_id, student_id, tutor_id, amount, reference) VALUES (?, ?, ?, ?, ?, ?)',
+    [conversationId, sessionId, studentId, tutorId, amount, reference || null]
   );
   return findById(result.insertId);
 }
@@ -25,6 +25,14 @@ async function listByConversation(conversationId) {
   return query(
     `${selectWithNames()} WHERE p.conversation_id = ? ORDER BY p.created_at DESC, p.id DESC`,
     [conversationId]
+  );
+}
+
+/** Payments attached to one specific session (excludes payments of other sessions in the same conversation). */
+async function listBySession(sessionId) {
+  return query(
+    `${selectWithNames()} WHERE p.session_id = ? ORDER BY p.created_at DESC, p.id DESC`,
+    [sessionId]
   );
 }
 
@@ -43,4 +51,4 @@ async function setStatus(id, status, reason = null) {
   );
 }
 
-module.exports = { create, findById, listByConversation, hasPending, setStatus };
+module.exports = { create, findById, listByConversation, listBySession, hasPending, setStatus };

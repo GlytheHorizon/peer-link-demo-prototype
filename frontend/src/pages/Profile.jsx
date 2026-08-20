@@ -25,6 +25,8 @@ const strandLabel = (v) => (v ? (STRAND_LABELS[v] || v) : null);
 
 const joinList = (arr) => (Array.isArray(arr) && arr.length ? arr.join(', ') : null);
 
+const subjectLabel = (s) => String(s?.name || s?.code || `Subject #${s?.id}`).trim();
+
 function ProfileHeaderCard({ profile, onEdit }) {
   return (
     <div className="profile-header">
@@ -38,7 +40,17 @@ function ProfileHeaderCard({ profile, onEdit }) {
   );
 }
 
-function InfoRow({ label, value }) {
+function InfoRow({ label, value, list }) {
+  if (list && list.length) {
+    return (
+      <div className="info-row info-row--list">
+        <span className="info-label">{label}</span>
+        <ul className="info-list">
+          {list.map((item, i) => <li key={i}>{item}</li>)}
+        </ul>
+      </div>
+    );
+  }
   return (
     <div className="info-row">
       <span className="info-label">{label}</span>
@@ -52,7 +64,7 @@ function InfoPanel({ title, rows }) {
     <div className="card profile-panel">
       <h4>{title}</h4>
       <div className="info-rows">
-        {rows.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} />)}
+        {rows.map((r) => <InfoRow key={r.label} label={r.label} value={r.value} list={r.list} />)}
       </div>
     </div>
   );
@@ -135,9 +147,11 @@ function StudentProfile() {
   const visibleSubjects = allSubjects
     .filter((s) => {
       if (!subjectQueryLower) return true;
+      const name = subjectLabel(s).toLowerCase();
+      const code = String(s.code || '').toLowerCase();
       return (
-        s.name.toLowerCase().includes(subjectQueryLower) ||
-        s.code.toLowerCase().includes(subjectQueryLower) ||
+        name.includes(subjectQueryLower) ||
+        code.includes(subjectQueryLower) ||
         (s.strand || '').toLowerCase().includes(subjectQueryLower) ||
         (STRAND_LABELS[s.strand] || '').toLowerCase().includes(subjectQueryLower)
       );
@@ -159,25 +173,23 @@ function StudentProfile() {
     setBusy(true);
     setMsg(null);
     setErr(null);
-    const [res, subjRes] = await Promise.all([
-      studentService.updateMe({
-        year_level: Number(e.target.year_level.value),
-        course: e.target.course.value,
-        bio: e.target.bio.value,
-        age: e.target.age.value ? Number(e.target.age.value) : undefined,
-        grade_level: e.target.grade_level.value || undefined,
-        school: e.target.school.value || undefined,
-        strand: e.target.strand.value || undefined,
-        contact_no: e.target.contact_no.value || undefined,
-        gender: e.target.gender.value || undefined,
-        learning_mode: e.target.learning_mode.value || undefined,
-        preferred_schedule: days,
-        preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined
-      }),
-      studentService.setSubjects(selectedSubjects)
-    ]);
+    const subjRes = await studentService.setSubjects(selectedSubjects);
+    const res = subjRes.ok ? await studentService.updateMe({
+      year_level: Number(e.target.year_level.value),
+      course: e.target.course.value,
+      bio: e.target.bio.value,
+      age: e.target.age.value ? Number(e.target.age.value) : undefined,
+      grade_level: e.target.grade_level.value || undefined,
+      school: e.target.school.value || undefined,
+      strand: e.target.strand.value || undefined,
+      contact_no: e.target.contact_no.value || undefined,
+      gender: e.target.gender.value || undefined,
+      learning_mode: e.target.learning_mode.value || undefined,
+      preferred_schedule: days,
+      preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined
+    }) : null;
     setBusy(false);
-    if (res.ok && subjRes.ok) {
+    if (res && subjRes.ok) {
       setMsg({ type: 'success', text: res.message });
       setProfile(res.data);
       setEditing(false);
@@ -186,8 +198,8 @@ function StudentProfile() {
       setTime(TIME_OPTIONS.includes(t) ? t : t ? 'Custom time' : '');
       setCustomTime(TIME_OPTIONS.includes(t) ? '' : t);
       setSelectedSubjects(res.data.subjects?.map((s) => s.id) || []);
-    } else if (!res.ok) setErr(res.message);
-    else setErr(subjRes.message);
+    } else if (!res) setErr(subjRes.message);
+    else setErr(res.message);
   };
 
   if (loading) return <Spinner />;
@@ -273,7 +285,7 @@ function StudentProfile() {
                   className={`day-chip ${selectedSubjects.includes(s.id) ? 'on' : ''}`}
                   onClick={() => toggleSubject(s.id)}
                 >
-                  {s.name}
+                  {subjectLabel(s)}
                   {s.strand && <span className="chip-strand"> · {STRAND_LABELS[s.strand] || s.strand}</span>}
                 </button>
               ))}
@@ -401,9 +413,11 @@ function TutorProfile() {
   const visibleSubjects = allSubjects
     .filter((s) => {
       if (!subjectQueryLower) return true;
+      const name = subjectLabel(s).toLowerCase();
+      const code = String(s.code || '').toLowerCase();
       return (
-        s.name.toLowerCase().includes(subjectQueryLower) ||
-        s.code.toLowerCase().includes(subjectQueryLower) ||
+        name.includes(subjectQueryLower) ||
+        code.includes(subjectQueryLower) ||
         (s.strand || '').toLowerCase().includes(subjectQueryLower) ||
         (STRAND_LABELS[s.strand] || '').toLowerCase().includes(subjectQueryLower)
       );
@@ -430,27 +444,25 @@ function TutorProfile() {
     setBusy(true);
     setMsg(null);
     setErr(null);
-    const [res, subjRes] = await Promise.all([
-      tutorService.updateMe({
-        course: e.target.course.value,
-        max_year_level: Number(e.target.max_year.value),
-        bio: e.target.bio.value,
-        availability: days,
-        age: e.target.age.value ? Number(e.target.age.value) : undefined,
-        grade_level: e.target.grade_level.value || undefined,
-        school: e.target.school.value || undefined,
-        strand: e.target.strand.value || undefined,
-        contact_no: e.target.contact_no.value || undefined,
-        gender: e.target.gender.value || undefined,
-        learning_mode: e.target.learning_mode.value || undefined,
-        preferred_schedule: prefDays,
-        preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined,
-        tags
-      }),
-      tutorService.setSubjects(subjects)
-    ]);
+    const subjRes = await tutorService.setSubjects(subjects);
+    const res = subjRes.ok ? await tutorService.updateMe({
+      course: e.target.course.value,
+      max_year_level: Number(e.target.max_year.value),
+      bio: e.target.bio.value,
+      availability: days,
+      age: e.target.age.value ? Number(e.target.age.value) : undefined,
+      grade_level: e.target.grade_level.value || undefined,
+      school: e.target.school.value || undefined,
+      strand: e.target.strand.value || undefined,
+      contact_no: e.target.contact_no.value || undefined,
+      gender: e.target.gender.value || undefined,
+      learning_mode: e.target.learning_mode.value || undefined,
+      preferred_schedule: prefDays,
+      preferred_time: time === 'Custom time' ? customTime.trim() : time || undefined,
+      tags
+    }) : null;
     setBusy(false);
-    if (res.ok && subjRes.ok) {
+    if (res && subjRes.ok) {
       setMsg({ type: 'success', text: res.message });
       setProfile(res.data);
       setEditing(false);
@@ -465,8 +477,8 @@ function TutorProfile() {
         map[s.id] = { proficiency: s.proficiency || 3, rate_per_hour: s.rate_per_hour ?? 100 };
       }
       setSubjectMap(map);
-    } else if (!res.ok) setErr(res.message);
-    else setErr(subjRes.message);
+    } else if (!res) setErr(subjRes.message);
+    else setErr(res.message);
   };
 
   if (!profile && !err) return <Spinner />;
@@ -498,13 +510,11 @@ function TutorProfile() {
           { label: 'Learning mode', value: modeLabel(profile.learning_mode) },
           { label: 'Preferred schedule', value: joinList(profile.preferred_schedule) },
           { label: 'Preferred time', value: profile.preferred_time },
-          { label: 'Weekly availability', value: (() => {
+          { label: 'Weekly availability', list: (() => {
             const av = profile.availability || {};
-            const days = Object.keys(av);
-            if (!days.length) return null;
-            return days.map((d) => `${d}: ${(av[d] || []).join(', ')}`).join(' · ');
+            return Object.keys(av).map((d) => `${d}: ${(av[d] || []).join(', ')}`);
           })() },
-          { label: 'Subjects taught', value: (profile.subjects || []).map((s) => `${s.name} (Proficiency ${s.proficiency}/5 · ₱${Number(s.rate_per_hour) || 100}/hr)`).join(', ') },
+          { label: 'Subjects I teach', list: (profile.subjects || []).map((s) => `${s.name} (Proficiency ${s.proficiency}/5 · ₱${Number(s.rate_per_hour) || 100}/hr)`) },
           { label: 'Tags', value: joinList(profile.tags) },
           { label: 'Bio', value: profile.bio }
         ]}
@@ -592,7 +602,7 @@ function TutorProfile() {
                       aria-pressed={on}
                     >
                       <span className="subject-editor-check">{on ? '✓' : ''}</span>
-                      <span className="subject-editor-name">{s.name}</span>
+                      <span className="subject-editor-name">{subjectLabel(s)}</span>
                       {s.strand && <span className="chip-strand"> · {STRAND_LABELS[s.strand] || s.strand}</span>}
                     </button>
                     {on && (

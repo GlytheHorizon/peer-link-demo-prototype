@@ -184,7 +184,7 @@ export default function Subjects() {
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(s.id); } }}
                     >
-                      <b>{s.name}</b>
+                      <b>{s.name || s.code || 'Subject'}</b>
                       <span className="muted small">{s.code}</span>
                       <span className="muted small desc">{s.description}</span>
                       {active ? (
@@ -311,7 +311,7 @@ export default function Subjects() {
           const active = selected.has(s.id);
           return (
             <button key={s.id} className={`subject-card ${active ? 'selected' : ''}`} onClick={() => toggle(s.id)}>
-              <b>{s.name}</b>
+              <b>{s.name || s.code || 'Subject'}</b>
               <span className="muted small">{s.code}</span>
               <span className="muted small desc">{s.description}</span>
             </button>

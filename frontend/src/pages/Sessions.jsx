@@ -87,6 +87,7 @@ function TutorSessionCard({
   onReject,
   onConfirmReschedule,
   onDeclineReschedule,
+  onConfirmPayment,
   hasPendingReq,
   myRequest
 }) {
@@ -104,7 +105,7 @@ function TutorSessionCard({
       <span className="mini-avatar sc-avatar" aria-hidden="true">{initialsOf(s.student_name)}</span>
       <div className="sc-main">
         <div className="sc-top">
-          <b className="sc-name">{s.student_name}</b>
+          <Link className="sc-name" to={`/students/${s.student_id}`}>{s.student_name}</Link>
           <span className={`pill ${meta.cls}`}>{statusLabel}</span>
           {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
             <span className="pill pill--pending">Payment request</span>
@@ -114,10 +115,15 @@ function TutorSessionCard({
         <div className="sc-sub">{dateLabel} · {timeLabel}</div>
         {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
           <p className="sc-note sc-note--amber">
-            Student sent a payment request —{' '}
+            {s.student_name} sent a payment request{s.pending_amount ? ` of ₱${Number(s.pending_amount).toLocaleString()}` : ''} —{' '}
             <button type="button" className="sc-note-link" onClick={() => onChat(s)}>
               check your messages to confirm
             </button>
+          </p>
+        )}
+        {s.status === 'accepted' && s.payment_id && (
+          <p className="sc-note sc-note--green">
+            {s.payment_amount ? `Paid ₱${Number(s.payment_amount).toLocaleString()}` : 'Paid'} — session is confirmed
           </p>
         )}
         {hasPendingReq && (
@@ -145,6 +151,11 @@ function TutorSessionCard({
         )}
         {s.status === 'accepted' && (
           <>
+            {s.pending_payment_id && !s.payment_id && (
+              <button className="action-btn action-btn--accept" onClick={() => onConfirmPayment(s)}>
+                Confirm payment
+              </button>
+            )}
             {hasPendingReq && !myRequest && (
               <>
                 <button className="action-btn action-btn--chat" onClick={() => onConfirmReschedule(s)}>Confirm</button>
@@ -152,7 +163,9 @@ function TutorSessionCard({
               </>
             )}
             <button className="action-btn action-btn--solid" onClick={() => onChat(s)}>Chat</button>
-            <button className="action-btn action-btn--outline-danger" onClick={() => onCancel(s)}>Cancel</button>
+            {!s.payment_id && (
+              <button className="action-btn action-btn--outline-danger" onClick={() => onCancel(s)}>Cancel</button>
+            )}
           </>
         )}
         {s.status !== 'accepted' && (
@@ -434,6 +447,20 @@ export default function Sessions() {
 
   const chatStudent = async (s) => openSessionChat(s, 'tutor');
 
+  const confirmPayment = async (s) => {
+    if (!s.conversation_id || !s.pending_payment_id) return;
+    const amount = s.pending_amount ? ` of ₱${Number(s.pending_amount).toLocaleString()}` : '';
+    const ok = await confirm({
+      title: 'Confirm payment?',
+      message: `Accept ${s.student_name}'s payment${amount} for the ${s.subject_name} session?`,
+      confirmText: 'Accept payment'
+    });
+    if (!ok) return;
+    const res = await conversationService.acceptPayment(s.conversation_id, s.pending_payment_id);
+    if (res.ok) { setNotice({ type: 'success', text: res.message }); sessions.reload(); }
+    else setNotice({ type: 'error', text: res.message });
+  };
+
   const cancelSession = async (s) => {
     const paid = s.payment_id ? ` This session has already been paid${s.payment_amount ? ` (₱${Number(s.payment_amount).toLocaleString()})` : ''} — there is no refund.` : '';
     const ok = await confirm({
@@ -560,6 +587,7 @@ export default function Sessions() {
               onReject={setRejecting}
               onConfirmReschedule={(x) => respondReschedule(x, 'accepted')}
               onDeclineReschedule={(x) => respondReschedule(x, 'rejected')}
+              onConfirmPayment={confirmPayment}
               hasPendingReq={hasPendingReq}
               myRequest={myRequest}
             />
@@ -648,12 +676,12 @@ export default function Sessions() {
                       </>
                     )}
                     {isTutor
-                      ? (
+                      ? !s.payment_id && (
                         <button className="action-btn action-btn--cancel" onClick={() => cancelSession(s)}>
                           Cancel
                         </button>
                       )
-                      : <StudentCancel session={s} onCancel={() => setCancelling(s)} />}
+                      : !s.payment_id && <StudentCancel session={s} onCancel={() => setCancelling(s)} />}
                   </>
                 )}
                 {(s.status === 'rejected' || s.status === 'cancelled') && !isTutor && (

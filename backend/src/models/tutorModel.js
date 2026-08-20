@@ -5,7 +5,7 @@ async function findProfileByUserId(userId) {
     `SELECT tp.*, CONCAT(u.first_name, ' ', u.last_name) AS full_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
-     WHERE tp.user_id = ?`,
+     WHERE tp.user_id = ? AND u.is_active = TRUE`,
     [userId]
   );
   return rows[0] || null;
@@ -76,7 +76,10 @@ async function findProfileById(id) {
 }
 
 async function getPublicTutor(id) {
-  const profile = await findProfileById(id);
+  // Accepts EITHER a tutor_profile id (matching results / dashboard links) OR a
+  // user id (messages / sessions / profile links) for the same tutor.
+  const profile = await findProfileById(id)
+    || await findProfileByUserId(id);
   if (!profile) return null;
   const subjects = await query(
     `SELECT s.id, s.code, s.name, s.description, ts.proficiency, ts.rate_per_hour
