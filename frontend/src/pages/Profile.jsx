@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { studentService, tutorService, subjectService } from '../services';
-import { Spinner, Alert, Modal } from '../components/ui';
+import { Spinner, Alert, Modal, RatingStars } from '../components/ui';
 import {
   STRANDS, STRAND_LABELS, GRADE_LEVELS, LEARNING_MODES, SCHEDULE_OPTIONS, TIME_OPTIONS
 } from '../constants/learningProfile';
@@ -331,6 +332,7 @@ function StudentProfile() {
 
 function TutorProfile() {
   const confirm = useConfirm();
+  const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [err, setErr] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -490,6 +492,21 @@ function TutorProfile() {
       <Alert type={msg?.type}>{msg ? msg.text : null}</Alert>
       <Alert type="error">{err}</Alert>
       <ProfileHeaderCard profile={profile} onEdit={() => setEditing(true)} />
+      <div className="card profile-panel">
+        <h4>My rating</h4>
+        <div className="info-rows">
+          <div className="info-row">
+            <span className="info-label">Average rating</span>
+            <span className="info-value">
+              <RatingStars rating={profile.avg_rating} />
+              <span className="muted small"> ({profile.rating_count} ratings)</span>
+              <Link className="rating-link" to={`/tutors/${user.id}/reviews`} title="View all reviews">
+                View all reviews
+              </Link>
+            </span>
+          </div>
+        </div>
+      </div>
       <InfoPanel
         title="Personal Information"
         rows={[

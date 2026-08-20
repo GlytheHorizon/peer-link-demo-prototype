@@ -41,6 +41,8 @@ app.get('/api/roles', protect, (req, res) =>
   res.json({ success: true, message: 'Role check', data: { role: req.user.role } })
 );
 
+app.get('/api/tab-updates', protect, require('./controllers/tabUpdateController').getUpdates);
+
 app.use(notFound);
 app.use(errorHandler);
 

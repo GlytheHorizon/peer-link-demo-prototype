@@ -45,13 +45,18 @@ async function findById(id) {
   return rows[0] || null;
 }
 
-async function create({ studentId, tutorId, subjectId, conversationId, scheduledStart, scheduledEnd, topic, notes }) {
+async function create({ studentId, tutorId, subjectId, conversationId, scheduledStart, scheduledEnd, topic, notes, learningMode }) {
   const result = await query(
-    `INSERT INTO sessions (student_id, tutor_id, subject_id, conversation_id, scheduled_start, scheduled_end, topic, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [studentId, tutorId, subjectId, conversationId || null, scheduledStart, scheduledEnd, topic || null, notes || null]
+    `INSERT INTO sessions (student_id, tutor_id, subject_id, conversation_id, scheduled_start, scheduled_end, topic, notes, learning_mode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [studentId, tutorId, subjectId, conversationId || null, scheduledStart, scheduledEnd, topic || null, notes || null, learningMode || null]
   );
   return findById(result.insertId);
+}
+
+/** Updates a session's proposed learning mode (online / face-to-face / both). */
+async function updateLearningMode(id, learningMode) {
+  await query('UPDATE sessions SET learning_mode = ? WHERE id = ?', [learningMode || null, id]);
 }
 
 async function listForStudent(studentId) {
@@ -165,4 +170,4 @@ async function countBetween(start, end) {
   return rows[0].total;
 }
 
-module.exports = { findById, create, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, forceComplete, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };
+module.exports = { findById, create, updateLearningMode, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, forceComplete, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };

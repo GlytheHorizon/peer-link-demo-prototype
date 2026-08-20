@@ -24,6 +24,15 @@ export function EmptyState({ title, description, action }) {
   );
 }
 
+export function InfoBox({ label, value }) {
+  return (
+    <div className="info-box">
+      <span className="info-box-label">{label}</span>
+      <span className="info-box-value">{value}</span>
+    </div>
+  );
+}
+
 export function Modal({ title, onClose, children, className = '' }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>

@@ -34,6 +34,7 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ NULL;
 -- Both-side completion confirmation (session completes only when both confirm)
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS student_complete_confirmed_at TIMESTAMPTZ NULL;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tutor_complete_confirmed_at TIMESTAMPTZ NULL;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS learning_mode VARCHAR(20) NULL;
 
 -- Profile contact number and gender (Profile tab edit form)
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS contact_no VARCHAR(20) NULL;

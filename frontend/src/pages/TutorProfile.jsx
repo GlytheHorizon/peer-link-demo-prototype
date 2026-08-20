@@ -72,7 +72,10 @@ export default function TutorProfile() {
         <div className="profile-identity">
           <h3>{tutor.full_name}</h3>
           <p className="profile-age">{tutor.email}</p>
-          <RatingStars rating={tutor.avg_rating} /> <span className="muted small">({tutor.rating_count} ratings)</span>
+          <Link className="rating-link" to={`/tutors/${tutor.user_id}/reviews`} title="View all reviews">
+            <RatingStars rating={tutor.avg_rating} />
+            <span className="muted small">({tutor.rating_count} ratings) · View reviews</span>
+          </Link>
         </div>
         <div className="profile-actions">
           <button className="btn btn-primary" onClick={startConversation} disabled={busy}>

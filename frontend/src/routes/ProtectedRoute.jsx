@@ -9,7 +9,10 @@ export default function ProtectedRoute({ roles, children }) {
   const location = useLocation();
 
   if (loading) return <Spinner label="Checking your session…" />;
-  if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  if (!user) {
+    const target = roles && roles.includes('admin') ? '/admin/login' : '/login';
+    return <Navigate to={target} state={{ from: location.pathname }} replace />;
+  }
   if (roles && !roles.includes(user.role_key)) {
     return <Navigate to="/dashboard" replace />;
   }

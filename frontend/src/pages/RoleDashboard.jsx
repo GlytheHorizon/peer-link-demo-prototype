@@ -46,7 +46,7 @@ const initials = (name = '') =>
 
 function StudentDashboard() {
   const { user } = useAuth();
-  const sessions = useApi(sessionService.list);
+  const sessions = useApi(sessionService.list, [], 15000);
   const matches = useApi(matchService.list);
 
   const all = sessions.data || [];
@@ -159,8 +159,8 @@ function StudentDashboard() {
 function TutorDashboard() {
   const { user } = useAuth();
   const confirm = useConfirm();
-  const profile = useApi(tutorService.getMe);
-  const sessions = useApi(sessionService.list);
+  const profile = useApi(tutorService.getMe, [], 20000);
+  const sessions = useApi(sessionService.list, [], 15000);
   const [notice, setNotice] = useState(null);
 
   const all = sessions.data || [];

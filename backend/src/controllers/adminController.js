@@ -92,7 +92,7 @@ const listSessions = asyncHandler(async (req, res) => {
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const offset = (Math.max(1, Number(page)) - 1) * Math.min(Number(limit), 100);
   const rows = await query(
-    `SELECT s.id, s.status, s.scheduled_start, s.scheduled_end, s.topic, s.created_at,
+    `SELECT s.id, s.status, s.learning_mode, s.scheduled_start, s.scheduled_end, s.topic, s.created_at,
             sub.code AS subject_code, sub.name AS subject_name,
             CONCAT(stu.first_name, ' ', stu.last_name) AS student_name,
             CONCAT(tut.first_name, ' ', tut.last_name) AS tutor_name

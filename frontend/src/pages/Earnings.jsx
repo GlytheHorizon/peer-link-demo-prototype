@@ -41,7 +41,7 @@ const inPeriod = (date, period) => {
 };
 
 export default function Earnings() {
-  const sessions = useApi(sessionService.list);
+  const sessions = useApi(sessionService.list, [], 15000);
   const [period, setPeriod] = useState('week');
 
   const rows = useMemo(() => {

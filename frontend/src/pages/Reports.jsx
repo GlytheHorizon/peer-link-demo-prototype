@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { reportService } from '../services';
-import { Spinner, Alert, RatingStars } from '../components/ui';
+import { Spinner, Alert, Modal, InfoBox, EmptyState, RatingStars, formatDateTime } from '../components/ui';
+
+/* ------------------------------------------------------------------ *
+ *  Academic & tutoring reports (faculty)
+ * ------------------------------------------------------------------ */
 
 function Overview() {
   const data = useApi(reportService.overview);
@@ -131,7 +137,7 @@ const TABS = [
   { key: 'students', label: 'Students', comp: StudentsReport }
 ];
 
-export default function Reports() {
+function AcademicReports() {
   const [tab, setTab] = useState('overview');
   const active = TABS.find((t) => t.key === tab);
   const Comp = active.comp;
@@ -151,4 +157,203 @@ export default function Reports() {
       <Comp />
     </div>
   );
+}
+
+/* ------------------------------------------------------------------ *
+ *  User reports management (admin) — submitted by students & tutors
+ * ------------------------------------------------------------------ */
+
+const REPORT_ACTIONS = [
+  { key: 'dismiss', label: 'Dismiss', tone: 'ghost', danger: false },
+  { key: 'warn', label: 'Warn user', tone: 'outline', danger: false },
+  { key: 'suspend', label: 'Suspend account', tone: 'primary', danger: true },
+  { key: 'ban', label: 'Ban account', tone: 'danger', danger: true }
+];
+
+const INITIAL_REPORTS = [
+  {
+    id: 1,
+    reporter: 'Bernard Bestil',
+    reporter_role: 'Student',
+    reported: 'Anna Cruz',
+    reported_role: 'Tutor',
+    reason: 'Tutor Missed Session',
+    session: 'Mathematics · Mar 12, 2026, 3:00 PM',
+    submitted: '2026-08-18T09:24:00+08:00',
+    details: 'The tutor confirmed the session but never showed up. I waited in the meeting room for the full hour and there was no response to my messages.',
+    status: 'open'
+  },
+  {
+    id: 2,
+    reporter: 'Gino Valdez',
+    reporter_role: 'Student',
+    reported: 'Gerome Valdez',
+    reported_role: 'Tutor',
+    reason: 'Tutor Missed Session',
+    session: 'Physics · Mar 14, 2026, 5:00 PM',
+    submitted: '2026-08-19T14:02:00+08:00',
+    details: 'The session was accepted but the tutor did not join the call and has not replied since. I rescheduled once already.',
+    status: 'open'
+  },
+  {
+    id: 3,
+    reporter: 'Jess Quinto',
+    reporter_role: 'Tutor',
+    reported: 'Elsa Quinto',
+    reported_role: 'Student',
+    reason: 'Tutor Missed Session',
+    session: 'English · Mar 15, 2026, 10:00 AM',
+    submitted: '2026-08-19T18:40:00+08:00',
+    details: 'The student booked a session and then did not attend. No notice was given before the scheduled time.',
+    status: 'open'
+  }
+];
+
+function UserReports() {
+  const confirm = useConfirm();
+  const [reports, setReports] = useState(INITIAL_REPORTS);
+  const [selected, setSelected] = useState(null);
+  const [msg, setMsg] = useState(null);
+
+  const openReports = reports.filter((r) => r.status === 'open');
+
+  const resolve = (id, actionLabel) => {
+    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'resolved', action: actionLabel } : r)));
+    setSelected(null);
+    setMsg({ type: 'success', text: `Report resolved — ${actionLabel}.` });
+  };
+
+  const handleAction = async (report, action) => {
+    if (action.danger) {
+      const ok = await confirm({
+        title: `${action.label}?`,
+        message: `${action.label} ${report.reported} based on this report?\nThis will affect their account access.`,
+        confirmText: action.label,
+        cancelText: 'Cancel',
+        danger: true
+      });
+      if (!ok) return;
+    }
+    resolve(report.id, action.label);
+  };
+
+  return (
+    <div>
+      <h1 className="dash-greeting">
+        Welcome back <span className="greet-name">Admin!</span>
+      </h1>
+
+      <div className="page-head">
+        <div>
+          <h2>Reports</h2>
+          <p className="muted small" style={{ margin: '2px 0 0' }}>
+            {openReports.length > 0
+              ? `${openReports.length} open report${openReports.length > 1 ? 's' : ''} from students and tutors`
+              : 'No open reports to review'}
+          </p>
+        </div>
+      </div>
+
+      {msg && <Alert type={msg.type}>{msg.text}</Alert>}
+
+      <div className="card verify-table-card">
+        {openReports.length === 0 ? (
+          <div className="verify-empty">
+            <EmptyState
+              title="No open reports"
+              description="Reports submitted by students and tutors will appear here for review."
+            />
+          </div>
+        ) : (
+          <table className="table verify-table">
+            <thead>
+              <tr>
+                <th>Reporter</th>
+                <th>Reported User</th>
+                <th>Reason</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {openReports.map((report) => (
+                <tr key={report.id}>
+                  <td className="verify-name">
+                    {report.reporter}
+                    <div className="muted small cap">{report.reporter_role}</div>
+                  </td>
+                  <td>
+                    {report.reported}
+                    <div className="muted small cap">{report.reported_role}</div>
+                  </td>
+                  <td className="verify-subject">{report.reason}</td>
+                  <td>
+                    <div className="verify-actions">
+                      <button
+                        type="button"
+                        className="btn btn-review btn-sm"
+                        onClick={() => setSelected(report)}
+                      >
+                        Review
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {selected && (
+        <Modal title="Review Report" onClose={() => setSelected(null)} className="verify-modal">
+          <div className="verify-profile">
+            <div className="verify-profile-head">
+              <div className="verify-avatar">{initials(selected.reported)}</div>
+              <div>
+                <h3>{selected.reported}</h3>
+                <p className="muted cap">{selected.reported_role} · {selected.reason}</p>
+              </div>
+            </div>
+
+            <div className="review-grid">
+              <InfoBox label="Reporter" value={`${selected.reporter} · ${selected.reporter_role}`} />
+              <InfoBox label="Reported user" value={`${selected.reported} · ${selected.reported_role}`} />
+              <InfoBox label="Reason" value={selected.reason} />
+              <InfoBox label="Submitted" value={formatDateTime(selected.submitted)} />
+              <InfoBox label="Related session" value={selected.session} />
+            </div>
+
+            <div className="verify-bio">
+              <span className="info-box-label">Report details</span>
+              <p className="verify-bio-text">{selected.details}</p>
+            </div>
+
+            <div className="report-actions">
+              {REPORT_ACTIONS.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className={`btn btn-${action.tone}`}
+                  onClick={() => handleAction(selected, action)}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function initials(name) {
+  return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/* ------------------------------------------------------------------ */
+
+export default function Reports() {
+  const { user } = useAuth();
+  return user?.role_key === 'admin' ? <UserReports /> : <AcademicReports />;
 }

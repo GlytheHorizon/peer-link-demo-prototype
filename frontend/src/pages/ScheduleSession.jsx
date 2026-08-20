@@ -45,7 +45,7 @@ export default function ScheduleSession() {
   const autoSubject = params.get('subject');
 
   const subjects = useApi(subjectService.list);
-  const requests = useApi(sessionService.list);
+  const requests = useApi(sessionService.list, [], 30000);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState(null);
   const firedKey = useRef('');

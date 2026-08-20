@@ -63,6 +63,20 @@ const STATUS_META = {
   rejected: { label: 'Rejected', cls: 'pill--cancelled' }
 };
 
+const LEARNING_MODES = [
+  { value: 'online', label: 'Online', hint: 'Virtual session via meeting link' },
+  { value: 'face-to-face', label: 'Face-to-face', hint: 'In-person meeting' },
+  { value: 'both', label: 'Both', hint: 'Either — tutor confirms' }
+];
+
+const LEARNING_MODE_LABELS = {
+  online: 'Online',
+  'face-to-face': 'Face-to-face',
+  both: 'Both'
+};
+
+const modeLabel = (m) => LEARNING_MODE_LABELS[m] || '—';
+
 const initialsOf = (name) => {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   return parts.slice(0, 2).map((p) => (p[0] || '').toUpperCase()).join('') || '?';
@@ -107,6 +121,7 @@ function TutorSessionCard({
         <div className="sc-top">
           <Link className="sc-name" to={`/students/${s.student_id}`}>{s.student_name}</Link>
           <span className={`pill ${meta.cls}`}>{statusLabel}</span>
+          {s.learning_mode && <span className="pill pill--neutral">Learning: {modeLabel(s.learning_mode)}</span>}
           {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
             <span className="pill pill--pending">Payment request</span>
           )}
@@ -180,6 +195,7 @@ function PayModal({ session, onClose, onPaid }) {
   const start = asDate(session.scheduled_start);
   const end = asDate(session.scheduled_end);
   const [method, setMethod] = useState('gcash');
+  const [learningMode, setLearningMode] = useState(session.learning_mode || 'online');
   const [date, setDate] = useState(toDateInput(start));
   const [startTime, setStartTime] = useState(toTimeInput(start));
   const [endTime, setEndTime] = useState(toTimeInput(end));
@@ -240,6 +256,7 @@ function PayModal({ session, onClose, onPaid }) {
     setErr(null);
     const res = await sessionService.pay(session.id, {
       method,
+      learning_mode: learningMode,
       scheduled_start: pickedStart.toISOString(),
       scheduled_end: pickedEnd.toISOString()
     });
@@ -264,6 +281,7 @@ function PayModal({ session, onClose, onPaid }) {
           <div className="pay-summary">
             <b className="pay-tutor">{session.tutor_name}</b>
             <div className="pay-row"><span>Subject</span><b>{session.subject_name}</b></div>
+            <div className="pay-row"><span>Learning Mode</span><b>{modeLabel(learningMode)}</b></div>
             <div className="pay-row"><span>Duration</span><b>{scheduleOk ? fmtDuration(durationMs) : '—'}</b></div>
             <div className="pay-row"><span>Rate</span><b>₱{rate}/hr</b></div>
             <div className="pay-row"><span>Total</span><b className="pay-total">{amount == null ? '—' : `₱${amount}`}</b></div>
@@ -272,6 +290,23 @@ function PayModal({ session, onClose, onPaid }) {
                 {fmtDuration(durationMs)} × ₱{rate}/hr = ₱{amount}
               </p>
             )}
+          </div>
+
+          <label className="pay-method-label">Learning Mode</label>
+          <div className="pay-methods">
+            {LEARNING_MODES.map((m) => (
+              <label key={m.value} className={`pay-method ${learningMode === m.value ? 'on' : ''}`}>
+                <input
+                  type="radio"
+                  name="learning-mode"
+                  value={m.value}
+                  checked={learningMode === m.value}
+                  onChange={() => setLearningMode(m.value)}
+                />
+                <span className="pay-method-name">{m.label}</span>
+                <span className="pay-method-hint">{m.hint}</span>
+              </label>
+            ))}
           </div>
 
           <label>Date</label>
@@ -404,7 +439,7 @@ export default function Sessions() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const sessions = useApi(sessionService.list);
+  const sessions = useApi(sessionService.list, [], 10000);
   const [filter, setFilter] = useState('upcoming');
   const [paying, setPaying] = useState(null);
   const [rescheduling, setRescheduling] = useState(null);
@@ -614,6 +649,7 @@ export default function Sessions() {
                   <span className="pill pill--neutral">{dayTag(start)}</span>
                   <span className="pill pill--neutral">{fmtRange(start, end)}</span>
                   <span className={`pill ${meta.cls}`}>{meta.label}</span>
+                  {s.learning_mode && <span className="pill pill--neutral">Learning: {modeLabel(s.learning_mode)}</span>}
                   {!isTutor && s.status === 'accepted' && !s.payment_id && s.pending_payment_id && (
                     <span className="pill pill--pending">Payment pending — awaiting tutor confirmation</span>
                   )}

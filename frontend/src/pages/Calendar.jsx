@@ -29,7 +29,7 @@ const fmtDate = (key) => {
 
 export default function Calendar() {
   const { user } = useAuth();
-  const sessions = useApi(sessionService.list);
+  const sessions = useApi(sessionService.list, [], 30000);
 
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());

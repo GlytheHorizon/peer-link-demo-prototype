@@ -6,6 +6,13 @@ import { sessionService, evaluationService } from '../services';
 import { Spinner, Alert, StatusBadge, RatingStars, formatDateTime } from '../components/ui';
 import CancelSessionModal, { useCancelWindow, CancelCountdown } from '../components/CancelSessionModal';
 
+const LEARNING_MODE_LABELS = {
+  online: 'Online',
+  'face-to-face': 'Face-to-face',
+  both: 'Both'
+};
+const modeLabel = (m) => LEARNING_MODE_LABELS[m] || '—';
+
 /** Student cancel control: active only during the 5-minute free-cancel window. */
 function StudentCancelDetails({ session, busy, onCancel }) {
   const { active } = useCancelWindow(session);
@@ -100,6 +107,7 @@ export default function SessionDetails() {
             <h3>{session.subject_name} <StatusBadge status={session.status} /></h3>
             <p className="muted small">{session.subject_code}</p>
             <p><b>When:</b> {formatDateTime(session.scheduled_start)} → {formatDateTime(session.scheduled_end)}</p>
+            {session.learning_mode && <p><b>Learning Mode:</b> {modeLabel(session.learning_mode)}</p>}
             <p><b>Student:</b> {session.student_name}</p>
             <p><b>Tutor:</b> {session.tutor_name}</p>
             {session.topic && <p><b>Topic:</b> {session.topic}</p>}

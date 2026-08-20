@@ -25,7 +25,7 @@ function statusClass(status) {
 }
 
 export default function Payment() {
-  const payments = useApi(paymentService.mine);
+  const payments = useApi(paymentService.mine, [], 15000);
   const [linking, setLinking] = useState(null);
   const [msg, setMsg] = useState(null);
 

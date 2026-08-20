@@ -8,7 +8,7 @@ import { Spinner, Alert, formatDateTime, EmptyState } from '../components/ui';
 import RescheduleModal from '../components/RescheduleModal';
 
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
-const PRESENCE_POLL_MS = 30 * 1000;
+const PRESENCE_POLL_MS = 15 * 1000;
 const HEARTBEAT_MS = 60 * 1000;
 
 /** "2hrs ago" style relative timestamp. */

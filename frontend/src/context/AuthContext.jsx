@@ -34,6 +34,15 @@ export function AuthProvider({ children }) {
     return res;
   }, []);
 
+  const adminLogin = useCallback(async (email, password) => {
+    const res = await authService.adminLogin({ email, password });
+    if (res.ok) {
+      setToken(res.data.token);
+      setUser(res.data.user);
+    }
+    return res;
+  }, []);
+
   const register = useCallback(async (payload) => {
     const res = await authService.register(payload);
     if (res.ok) {
@@ -58,6 +67,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    adminLogin,
     register,
     logout,
     isRole,

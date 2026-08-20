@@ -5,10 +5,28 @@ const { validate, v } = require('../validators/validate');
 const userModel = require('../models/userModel');
 const studentModel = require('../models/studentModel');
 const tutorModel = require('../models/tutorModel');
+const appModel = require('../models/tutorApplicationModel');
 const { withTransaction, query } = require('../config/db');
 const log = require('../services/activityLogService').log;
 
 const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', faculty: 'Faculty', admin: 'Administrator' };
+
+/** Adds the tutor verification status (approved/pending/rejected/null) to a user object. */
+async function withVerification(user) {
+  const base = {
+    id: user.id,
+    email: user.email,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    role: ROLE_LABELS[user.role] || user.role,
+    role_key: user.role
+  };
+  if (user.role === 'tutor') {
+    const app = await appModel.findByEmail(user.email);
+    base.verification_status = app ? app.status : null;
+  }
+  return base;
+}
 
 /** POST /api/auth/register */
 const register = asyncHandler(async (req, res) => {
@@ -72,6 +90,36 @@ const login = asyncHandler(async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw new ApiError(401, 'Invalid email or password');
   }
+  if (user.role === 'admin') {
+    throw new ApiError(403, 'Admins must sign in through the admin portal.');
+  }
+  if (!user.is_active) {
+    throw new ApiError(403, 'This account has been deactivated. Contact an administrator.');
+  }
+
+  log(req, 'auth.login', 'user', user.id, null, user.id);
+  const token = signToken({ sub: String(user.id), role: user.role });
+  ok(res, 200, {
+    token,
+    user: { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: ROLE_LABELS[user.role], role_key: user.role }
+  }, 'Login successful');
+});
+
+/** POST /api/auth/admin-login — restricted to administrators. */
+const adminLogin = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  validate({
+    email: [v.required('email'), v.email()],
+    password: [v.required('password')]
+  }, req.body);
+
+  const user = await userModel.findByEmail(email);
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    throw new ApiError(401, 'Invalid email or password');
+  }
+  if (user.role !== 'admin') {
+    throw new ApiError(403, 'This portal is for administrators only');
+  }
   if (!user.is_active) {
     throw new ApiError(403, 'This account has been deactivated. Contact an administrator.');
   }
@@ -111,4 +159,4 @@ const emailExists = asyncHandler(async (req, res) => {
   ok(res, 200, { exists: Boolean(user) });
 });
 
-module.exports = { register, login, logout, me, emailExists, ROLE_LABELS };
+module.exports = { register, login, adminLogin, logout, me, emailExists, ROLE_LABELS };

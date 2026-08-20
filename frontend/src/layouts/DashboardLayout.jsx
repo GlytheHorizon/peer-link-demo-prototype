@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { conversationService } from '../services';
+import { conversationService, tabUpdateService } from '../services';
+
+const SEEN_PREFIX = 'peerlink_tab_seen';
+
+const getSeen = (uid) => {
+  try { return JSON.parse(localStorage.getItem(`${SEEN_PREFIX}_${uid}`) || '{}'); }
+  catch { return {}; }
+};
+
+const saveSeen = (uid, map) => {
+  try { localStorage.setItem(`${SEEN_PREFIX}_${uid}`, JSON.stringify(map)); } catch {}
+};
 
 const NAV = {
   student: [
@@ -31,11 +42,11 @@ const NAV = {
     { to: '/reports', label: 'Reports', icon: '◫' }
   ],
   admin: [
-    { to: '/dashboard', label: 'Dashboard', icon: '▤' },
+    { to: '/admin/verifications', label: 'Tutor Verifications', icon: '✓' },
     { to: '/admin/users', label: 'User Management', icon: '☻' },
-    { to: '/admin/subjects', label: 'Subjects', icon: '☰' },
+    { to: '/admin/sessions', label: 'Manage Session', icon: '◷' },
     { to: '/reports', label: 'Reports', icon: '◫' },
-    { to: '/admin/logs', label: 'Activity Logs', icon: '☷' }
+    { to: '/profile', label: 'Profile', icon: '✎' }
   ]
 };
 
@@ -59,7 +70,9 @@ export default function DashboardLayout({ children }) {
   const { user, logout, roleLabel } = useAuth();
   const confirm = useConfirm();
   const navigate = useNavigate();
+  const location = useLocation();
   const [unread, setUnread] = useState(0);
+  const [tabUpdates, setTabUpdates] = useState({});
   const [open, setOpen] = useState(false);
 
   const refreshUnread = () => {
@@ -68,11 +81,51 @@ export default function DashboardLayout({ children }) {
     });
   };
 
+  const refreshTabUpdates = () => {
+    tabUpdateService.latest().then((res) => {
+      if (!res.ok) return;
+      const tabs = res.data.tabs || {};
+      setTabUpdates(tabs);
+      const uid = user?.id;
+      if (!uid) return;
+      const seen = getSeen(uid);
+      if (!seen._init) {
+        const init = { _init: true };
+        for (const [k, v] of Object.entries(tabs)) init[k] = v;
+        saveSeen(uid, init);
+      }
+    });
+  };
+
   useEffect(() => {
     refreshUnread();
-    const t = setInterval(refreshUnread, 30000);
+    refreshTabUpdates();
+    const t = setInterval(() => {
+      refreshUnread();
+      refreshTabUpdates();
+    }, 30000);
     return () => clearInterval(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Visiting a tab counts as "seen" — its red dot goes away.
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid) return;
+    const seen = getSeen(uid);
+    if (!seen._init) return;
+    seen[location.pathname] = tabUpdates[location.pathname] || new Date().toISOString();
+    saveSeen(uid, seen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, tabUpdates, user?.id]);
+
+  const isNew = (key) => {
+    const latest = tabUpdates[key];
+    if (!latest) return false;
+    const seen = getSeen(user?.id);
+    const seenTs = seen[key];
+    return !seenTs || new Date(latest).getTime() > new Date(seenTs).getTime();
+  };
 
   const items = NAV[user?.role_key] || NAV.student;
 
@@ -107,6 +160,7 @@ export default function DashboardLayout({ children }) {
               <span className="nav-icon">{item.icon}</span>
               {item.label}
               {item.to === '/messages' && unread > 0 && <span className="nav-unread">{unread}</span>}
+              {item.to !== '/messages' && isNew(item.to) && <span className="nav-dot" aria-label="New updates" />}
             </NavLink>
           ))}
         </nav>

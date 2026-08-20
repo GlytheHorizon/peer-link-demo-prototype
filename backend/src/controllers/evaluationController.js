@@ -41,6 +41,13 @@ const listMine = asyncHandler(async (req, res) => {
   ok(res, 200, data);
 });
 
+/** GET /api/evaluations/tutor/:tutorId — public review list for a tutor (by user id). */
+const listForTutor = asyncHandler(async (req, res) => {
+  const tutorId = Number(req.params.tutorId);
+  if (!Number.isInteger(tutorId) || tutorId < 1) throw new ApiError(400, 'Invalid tutor id');
+  ok(res, 200, await evaluationModel.listReceivedByTutor(tutorId));
+});
+
 /** GET /api/evaluations/:sessionId — evaluation for a session (participants + admin). */
 const getForSession = asyncHandler(async (req, res) => {
   const session = await sessionModel.findById(Number(req.params.sessionId));
@@ -51,4 +58,4 @@ const getForSession = asyncHandler(async (req, res) => {
   ok(res, 200, await evaluationModel.findBySession(session.id));
 });
 
-module.exports = { create, listMine, getForSession };
+module.exports = { create, listMine, listForTutor, getForSession };

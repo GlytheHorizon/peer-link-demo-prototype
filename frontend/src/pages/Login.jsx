@@ -90,7 +90,13 @@ export default function Login() {
 
           <hr className="login-divider" />
           <p className="signup-line">
-            Don&rsquo;t have an account? <Link to="/register">Create Account</Link>
+            Don&rsquo;t have an account?{' '}
+            <Link to={role === 'tutor' ? '/register/tutor' : '/register'}>
+              Create {role === 'tutor' ? 'Tutor' : 'Student'} Account
+            </Link>
+          </p>
+          <p className="signup-line" style={{ marginTop: 8 }}>
+            Administrator? <Link to="/admin/login">Admin Login</Link>
           </p>
 
           <details className="demo-details">
@@ -103,8 +109,7 @@ export default function Login() {
                   ['maria@peerlink.edu', 'Tutor@123'],
                   ['gerome@peerlink.edu', 'Tutor@123'],
                   ['kiel@peerlink.edu', 'Tutor@123'],
-                  ['faculty@peerlink.edu', 'Faculty@123'],
-                  ['admin@peerlink.edu', 'Admin@123']
+                  ['faculty@peerlink.edu', 'Faculty@123']
                 ].map(([email, password]) => (
                   <tr
                     key={email}

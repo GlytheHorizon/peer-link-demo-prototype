@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, getToken } from './api';
 
 /** Builds a query string, dropping empty values (URLSearchParams would send them as "undefined"). */
 const toQuery = (params = {}) => {
@@ -99,6 +99,7 @@ export const paymentService = {
 export const evaluationService = {
   create: (sessionId, rating, comment) => apiFetch('/evaluations', { method: 'POST', body: { session_id: sessionId, rating, comment } }),
   mine: () => apiFetch('/evaluations/mine'),
+  forTutor: (tutorId) => apiFetch(`/evaluations/tutor/${tutorId}`),
   getForSession: (sessionId) => apiFetch(`/evaluations/${sessionId}`)
 };
 
@@ -118,7 +119,23 @@ export const adminService = {
   },
   listSubjectRequests: () => apiFetch('/admin/subject-requests'),
   approveSubjectRequest: (id) => apiFetch(`/admin/subject-requests/${id}/approve`, { method: 'POST', body: {} }),
-  rejectSubjectRequest: (id) => apiFetch(`/admin/subject-requests/${id}/reject`, { method: 'POST', body: {} })
+  rejectSubjectRequest: (id) => apiFetch(`/admin/subject-requests/${id}/reject`, { method: 'POST', body: {} }),
+  listApplications: (params = {}) => {
+    const qs = toQuery(params);
+    return apiFetch(`/admin/tutor-applications${qs ? `?${qs}` : ''}`);
+  },
+  getApplication: (id) => apiFetch(`/admin/tutor-applications/${id}`),
+  approveApplication: (id) => apiFetch(`/admin/tutor-applications/${id}/approve`, { method: 'POST', body: {} }),
+  rejectApplication: (id) => apiFetch(`/admin/tutor-applications/${id}/reject`, { method: 'POST', body: {} }),
+  getApplicationFile: async (id, field) => {
+    const token = getToken();
+    const res = await fetch(`/api/admin/tutor-applications/${id}/file/${field}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  }
 };
 
 export const reportService = {
@@ -133,4 +150,8 @@ export const activityLogService = {
     const qs = toQuery(params);
     return apiFetch(`/activity-logs${qs ? `?${qs}` : ''}`);
   }
+};
+
+export const tabUpdateService = {
+  latest: () => apiFetch('/tab-updates')
 };

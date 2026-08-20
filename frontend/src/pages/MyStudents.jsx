@@ -55,7 +55,7 @@ const subjectStatus = (list) => {
 export default function MyStudents() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const sessions = useApi(sessionService.list);
+  const sessions = useApi(sessionService.list, [], 15000);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [notice, setNotice] = useState(null);

@@ -59,14 +59,15 @@ const checkConflicts = asyncHandler(async (req, res) => {
 const createRequest = asyncHandler(async (req, res) => {
   if (req.user.role !== 'student') throw new ApiError(403, 'Only students can create session requests');
 
-  const { tutor_id, subject_id, scheduled_start, scheduled_end, topic, notes } = req.body;
+  const { tutor_id, subject_id, scheduled_start, scheduled_end, topic, notes, learning_mode } = req.body;
   validate({
     tutor_id: [v.required('tutor_id'), v.intRange(1, 1000000, 'tutor id')],
     subject_id: [v.required('subject_id'), v.intRange(1, 1000000, 'subject id')],
     scheduled_start: [v.required('scheduled_start'), v.date('start')],
     scheduled_end: [v.required('scheduled_end'), v.date('end')],
     topic: [v.maxLen(255)],
-    notes: [v.maxLen(2000)]
+    notes: [v.maxLen(2000)],
+    learning_mode: [v.isIn(['online', 'face-to-face', 'both'])]
   }, req.body);
 
   const start = new Date(scheduled_start);
@@ -75,7 +76,8 @@ const createRequest = asyncHandler(async (req, res) => {
   if (end.getTime() - start.getTime() > MAX_DURATION_MS) throw new ApiError(400, 'Sessions cannot exceed 4 hours');
   if (start.getTime() <= Date.now()) throw new ApiError(400, 'Sessions must be scheduled in the future');
 
-  if (!(await subjectModel.findById(subject_id))) throw new ApiError(404, 'Subject not found');
+  const subject = await subjectModel.findById(subject_id);
+  if (!subject) throw new ApiError(404, 'Subject not found');
   const tutorProfile = await tutorModel.findProfileByUserId(tutor_id);
   if (!tutorProfile) throw new ApiError(404, 'Tutor not found');
 
@@ -107,8 +109,13 @@ const createRequest = asyncHandler(async (req, res) => {
     scheduledStart: startIso,
     scheduledEnd: endIso,
     topic,
-    notes
+    notes,
+    learningMode: learning_mode
   });
+  await addSystemMessage(
+    conversation.id,
+    `Session request sent — ${subject.name} on ${fmtSchedule(startIso, endIso)} — waiting for the tutor's response.`
+  );
   log(req, 'session.request', 'session', session.id, { tutor_id });
   ok(res, 201, session, 'Session request created — waiting for tutor response');
 });
@@ -138,6 +145,12 @@ const respond = asyncHandler(async (req, res) => {
   ok(res, 200, await sessionModel.findById(session.id), decision === 'accepted' ? 'Session confirmed' : 'Session rejected');
 });
 
+/** Posts a one-off system message into the conversation thread. */
+async function addSystemMessage(conversationId, body) {
+  if (!conversationId || !body) return;
+  await messageModel.create({ conversationId, body, isSystem: true });
+}
+
 /** Posts the "Session Completed" system message once per conversation. */
 async function addCompletionMessage(conversationId) {
   if (!conversationId) return;
@@ -147,6 +160,16 @@ async function addCompletionMessage(conversationId) {
     body: 'Session Completed',
     isSystem: true
   });
+}
+
+/** "Sep 12 · 2:00 PM – 3:00 PM" style schedule label for system messages. */
+function fmtSchedule(start, end) {
+  const st = new Date(start);
+  const en = new Date(end);
+  const date = st.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+  const t1 = st.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+  const t2 = en.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${t1} – ${t2}`;
 }
 
 /** POST /api/sessions/:id/complete-confirm — a participant confirms the session
@@ -187,6 +210,11 @@ const confirmComplete = asyncHandler(async (req, res) => {
   const completedNow = updated.status === 'completed';
   if (completedNow) {
     await addCompletionMessage(session.conversation_id);
+  } else {
+    await addSystemMessage(
+      session.conversation_id,
+      `${isStudent ? session.student_name : session.tutor_name} has requested to mark this session as completed — waiting for the ${isStudent ? 'tutor' : 'student'} to confirm.`
+    );
   }
   log(req, completedNow ? 'session.complete' : 'session.complete_confirm', 'session', session.id, { by: isStudent ? 'student' : 'tutor' });
   ok(res, 200, updated, completedNow
@@ -220,6 +248,10 @@ const cancel = asyncHandler(async (req, res) => {
   }
   const reasonText = reason != null ? String(reason).trim().slice(0, 300) || null : null;
   await sessionModel.cancel(session.id, reasonText);
+  await addSystemMessage(
+    session.conversation_id,
+    `Session cancelled${reasonText ? ` — ${reasonText}` : ''}.`
+  );
   log(req, 'session.cancel', 'session', session.id, { ...(reasonText ? { reason: reasonText } : {}) });
   ok(res, 200, await sessionModel.findById(session.id), 'Session cancelled');
 });
@@ -359,8 +391,11 @@ const deleteRequest = asyncHandler(async (req, res) => {
 const pay = asyncHandler(async (req, res) => {
   if (req.user.role !== 'student') throw new ApiError(403, 'Only students can pay for sessions');
 
-  const { method, scheduled_start, scheduled_end } = req.body;
+  const { method, scheduled_start, scheduled_end, learning_mode } = req.body;
   validate({ method: [v.required('method'), v.isIn(PAY_METHODS)] }, req.body);
+  if (learning_mode !== undefined && learning_mode !== null && learning_mode !== '') {
+    validate({ learning_mode: [v.isIn(['online', 'face-to-face', 'both'])] }, { learning_mode });
+  }
 
   const session = await sessionModel.findById(Number(req.params.id));
   if (!session) throw new ApiError(404, 'Session not found');
@@ -409,6 +444,8 @@ const pay = asyncHandler(async (req, res) => {
   const hours = Math.max((end.getTime() - start.getTime()) / 3600000, 15 / 60);
   const rate = session.rate_per_hour != null ? Number(session.rate_per_hour) : RATE_PER_HOUR;
   const amount = Math.round(hours * rate);
+
+  if (learning_mode) await sessionModel.updateLearningMode(session.id, learning_mode);
 
   let payment;
   let message = 'Payment recorded — your session is confirmed';
