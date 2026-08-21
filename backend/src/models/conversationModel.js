@@ -2,7 +2,7 @@ const { query } = require('../config/db');
 
 async function findOrCreate({ studentId, tutorId, subjectId }) {
   const existing = await query(
-    `SELECT * FROM conversations WHERE student_id = ? AND tutor_id = ? AND subject_id IS NOT DISTINCT FROM ?`,
+    `SELECT * FROM conversations WHERE student_id = ? AND tutor_id = ? AND subject_id <=> ?`,
     [studentId, tutorId, subjectId]
   );
   if (existing[0]) return existing[0];
