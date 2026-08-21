@@ -48,9 +48,28 @@ const updateUser = asyncHandler(async (req, res) => {
   if (id === req.user.id) throw new ApiError(400, 'You cannot modify your own account here');
 
   const { is_active, first_name, last_name } = req.body;
-  validate({ is_active: [v.bool('is_active')] }, req.body);
-  await userModel.update(id, { first_name, last_name, is_active });
-  log(req, 'admin.user_update', 'user', id, { is_active });
+  if (is_active !== undefined) {
+    validate({ is_active: [v.bool('is_active')] }, req.body);
+  }
+
+  const updateFields = {};
+  if (first_name !== undefined) updateFields.first_name = first_name;
+  if (last_name !== undefined) updateFields.last_name = last_name;
+
+  if (is_active !== undefined) {
+    const isActiveBool = Boolean(is_active);
+    updateFields.is_active = isActiveBool;
+    // If activating the user, also lift any active suspension or ban
+    if (isActiveBool) {
+      updateFields.suspended_until = null;
+      updateFields.suspension_reason = null;
+      updateFields.is_banned = false;
+      updateFields.ban_reason = null;
+    }
+  }
+
+  await userModel.update(id, updateFields);
+  log(req, 'admin.user_update', 'user', id, { is_active: updateFields.is_active });
   ok(res, 200, await userModel.findById(id), 'User updated');
 });
 

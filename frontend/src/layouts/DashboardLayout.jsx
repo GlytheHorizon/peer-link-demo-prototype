@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { conversationService, tabUpdateService } from '../services';
 import WarningToast from '../components/WarningToast';
+import SessionTimeoutModal from '../components/SessionTimeoutModal';
+import useIdleTimeout from '../hooks/useIdleTimeout';
 
 const SEEN_PREFIX = 'peerlink_tab_seen';
 
@@ -67,8 +69,17 @@ function LogoNode() {
   );
 }
 
+// Idle timeout: warn at 13 min, logout at 15 min
+const IDLE_TIMEOUT_MS  = 15 * 60 * 1000; // 15 minutes
+const IDLE_WARNING_MS  =  2 * 60 * 1000; //  2 minutes warning
+
 export default function DashboardLayout({ children }) {
-  const { user, logout, roleLabel, refreshUser } = useAuth();
+  const {
+    user, logout, roleLabel, refreshUser,
+    showTimeoutWarning, timeoutSecondsLeft,
+    handleIdleWarn, handleIdleLogout,
+    dismissTimeoutWarning, confirmTimeoutLogout
+  } = useAuth();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
@@ -78,6 +89,19 @@ export default function DashboardLayout({ children }) {
 
   // Tutor approval status derived from user.verification_status (updated via refreshUser)
   const tutorApproved = user?.role_key === 'tutor' ? user.verification_status === 'approved' : true;
+
+  // ─── Idle timeout (only when a user is logged in) ────────────────────────
+  const { resetIdle } = useIdleTimeout({
+    timeoutMs:  IDLE_TIMEOUT_MS,
+    warningMs:  IDLE_WARNING_MS,
+    enabled:    Boolean(user),
+    onWarn:     handleIdleWarn,
+    onLogout:   async () => {
+      await handleIdleLogout();
+      navigate('/');
+    }
+  });
+  // ─────────────────────────────────────────────────────────────────────────
 
   const refreshUnread = () => {
     conversationService.unreadCount().then((res) => {
@@ -161,6 +185,13 @@ export default function DashboardLayout({ children }) {
     navigate('/');
   };
 
+  const handleStayLoggedIn = () => dismissTimeoutWarning(resetIdle);
+
+  const handleTimeoutLogout = async () => {
+    await confirmTimeoutLogout();
+    navigate('/');
+  };
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${open ? 'open' : ''}`}>
@@ -199,6 +230,12 @@ export default function DashboardLayout({ children }) {
         <main className="content">{children}</main>
       </div>
       <WarningToast userId={user?.id} />
+      <SessionTimeoutModal
+        isOpen={showTimeoutWarning}
+        secondsLeft={timeoutSecondsLeft}
+        onStay={handleStayLoggedIn}
+        onLogout={handleTimeoutLogout}
+      />
     </div>
   );
 }

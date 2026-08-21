@@ -1,6 +1,6 @@
 const { query, qex, likeEscape } = require('../config/db');
 
-const SAFE_COLUMNS = 'id, email, first_name, last_name, role, is_active, suspended_until, suspension_reason, is_banned, ban_reason, last_seen_at, created_at, updated_at';
+const SAFE_COLUMNS = 'id, email, first_name, last_name, role, is_active, suspended_until, suspension_reason, is_banned, ban_reason, last_seen_at, created_at, updated_at, name_changes_count, name_changes_reset_at';
 
 async function findByEmail(email) {
   const rows = await query('SELECT * FROM users WHERE email = ?', [email]);
@@ -20,19 +20,54 @@ async function create({ email, password_hash, first_name, last_name, role }, con
 }
 
 async function update(id, fields) {
-  const allowed = ['first_name', 'last_name', 'is_active', 'suspended_until', 'suspension_reason', 'is_banned', 'ban_reason'];
+  const allowed = ['first_name', 'last_name', 'email', 'is_active', 'suspended_until', 'suspension_reason', 'is_banned', 'ban_reason', 'name_changes_count', 'name_changes_reset_at'];
   const sets = [];
   const params = [];
   for (const f of allowed) {
     if (fields[f] !== undefined) {
       sets.push(`${f} = ?`);
-      params.push(fields[f]);
+      let val = fields[f];
+      if (f === 'is_active' || f === 'is_banned') {
+        val = Boolean(val);
+      }
+      params.push(val);
     }
   }
   if (!sets.length) return 0;
   params.push(id);
   const result = await query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
   return result.affectedRows;
+}
+
+/**
+ * Changes a user's display name, enforcing a 2-change-per-calendar-month limit.
+ * Returns { ok: true } or { ok: false, message }
+ */
+async function changeName(id, firstName, lastName) {
+  const rows = await query(`SELECT name_changes_count, name_changes_reset_at FROM users WHERE id = ?`, [id]);
+  if (!rows.length) return { ok: false, message: 'User not found' };
+  const user = rows[0];
+  const now = new Date();
+  const resetAt = user.name_changes_reset_at ? new Date(user.name_changes_reset_at) : null;
+  // Reset counter if we've moved into a new calendar month
+  const sameMonth = resetAt && resetAt.getMonth() === now.getMonth() && resetAt.getFullYear() === now.getFullYear();
+  const count = sameMonth ? (user.name_changes_count || 0) : 0;
+  if (count >= 2) {
+    return { ok: false, message: 'You can only change your name 2 times per month. Limit resets next month.' };
+  }
+  await query(
+    'UPDATE users SET first_name = ?, last_name = ?, name_changes_count = ?, name_changes_reset_at = ? WHERE id = ?',
+    [firstName, lastName, count + 1, now, id]
+  );
+  return { ok: true, changesUsed: count + 1 };
+}
+
+/** Changes a user's email after verifying it doesn't already exist. */
+async function changeEmail(id, newEmail) {
+  const existing = await findByEmail(newEmail);
+  if (existing && existing.id !== id) return { ok: false, message: 'That email address is already in use.' };
+  await query('UPDATE users SET email = ? WHERE id = ?', [newEmail, id]);
+  return { ok: true };
 }
 
 async function changePassword(id, newHash, conn) {
@@ -132,6 +167,8 @@ module.exports = {
   findById,
   create,
   update,
+  changeName,
+  changeEmail,
   changePassword,
   touchLastSeen,
   list,

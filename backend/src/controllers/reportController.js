@@ -12,7 +12,7 @@ const overview = asyncHandler(async (req, res) => {
     query('SELECT status, COUNT(*) AS total FROM sessions GROUP BY status'),
     query('SELECT COUNT(*) AS total, ROUND(AVG(rating), 2) AS avg_rating FROM evaluations'),
     query('SELECT COUNT(*) AS total FROM matches'),
-    query("SELECT COUNT(*) AS total FROM sessions WHERE status = 'completed' AND created_at >= now() - INTERVAL '30 days'")
+    query("SELECT COUNT(*) AS total FROM sessions WHERE status = 'completed' AND created_at >= NOW() - INTERVAL 30 DAY")
   ]);
   log(req, 'report.overview', 'report');
   ok(res, 200, {
@@ -38,8 +38,8 @@ const sessionsReport = asyncHandler(async (req, res) => {
     query(
       `SELECT u.id AS tutor_id, CONCAT(u.first_name, ' ', u.last_name) AS tutor_name,
               COUNT(s.id) AS total_sessions,
-              SUM((s.status = 'completed')::int) AS completed,
-              SUM((s.status = 'pending')::int) AS pending
+              SUM(s.status = 'completed') AS completed,
+              SUM(s.status = 'pending') AS pending
        FROM users u
        LEFT JOIN sessions s ON s.tutor_id = u.id
        WHERE u.role = 'tutor'
@@ -199,7 +199,7 @@ const resolveUserReport = asyncHandler(async (req, res) => {
   }
 
   await query(
-    `UPDATE user_reports SET status = 'resolved', action_taken = ?, resolved_at = now() WHERE id = ?`,
+    `UPDATE user_reports SET status = 'resolved', action_taken = ?, resolved_at = NOW() WHERE id = ?`,
     [action, id]
   );
 

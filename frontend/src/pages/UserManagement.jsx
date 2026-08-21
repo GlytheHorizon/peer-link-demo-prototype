@@ -131,17 +131,21 @@ export default function UserManagement() {
                           <button
                             className="btn btn-outline btn-sm"
                             onClick={async () => {
+                              const isRestricted = u.is_banned || (u.suspended_until && new Date(u.suspended_until) > new Date());
+                              const willActivate = !u.is_active || isRestricted;
                               const ok = await confirm({
-                                title: u.is_active ? 'Deactivate user?' : 'Activate user?',
-                                message: `${u.is_active ? 'Deactivate' : 'Activate'} ${u.first_name} ${u.last_name}?`,
-                                confirmText: u.is_active ? 'Deactivate' : 'Activate'
+                                title: willActivate ? 'Activate user?' : 'Deactivate user?',
+                                message: willActivate
+                                  ? `Activate ${u.first_name} ${u.last_name}${isRestricted ? ' and lift active suspension/ban' : ''}?`
+                                  : `Deactivate ${u.first_name} ${u.last_name}?`,
+                                confirmText: willActivate ? 'Activate' : 'Deactivate'
                               });
                               if (!ok) return;
-                              const res = await adminService.updateUser(u.id, { is_active: u.is_active ? 0 : 1 });
-                              deal(res, u.is_active ? 'User deactivated' : 'User activated');
+                              const res = await adminService.updateUser(u.id, { is_active: willActivate });
+                              deal(res, willActivate ? (isRestricted ? 'User activated and restriction lifted' : 'User activated') : 'User deactivated');
                             }}
                           >
-                            {u.is_active ? 'Deactivate' : 'Activate'}
+                            {!u.is_active || u.is_banned || (u.suspended_until && new Date(u.suspended_until) > new Date()) ? 'Activate' : 'Deactivate'}
                           </button>
                           <button
                             className="btn btn-ghost btn-sm"

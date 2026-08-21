@@ -19,7 +19,10 @@ export const userService = {
   updateMe: (payload) => apiFetch('/users/me', { method: 'PUT', body: payload }),
   heartbeat: () => apiFetch('/users/heartbeat', { method: 'POST' }),
   getUnacknowledgedWarnings: () => apiFetch('/users/me/warnings/unacknowledged'),
-  acknowledgeWarning: (id) => apiFetch(`/users/warnings/${id}/acknowledge`, { method: 'POST', body: {} })
+  acknowledgeWarning: (id) => apiFetch(`/users/warnings/${id}/acknowledge`, { method: 'POST', body: {} }),
+  changeName: (payload) => apiFetch('/users/me/name', { method: 'PATCH', body: payload }),
+  changeEmail: (payload) => apiFetch('/users/me/email', { method: 'PATCH', body: payload }),
+  changePassword: (payload) => apiFetch('/users/me/password', { method: 'PATCH', body: payload })
 };
 
 export const studentService = {

@@ -79,6 +79,61 @@ export function AuthProvider({ children }) {
     [user]
   );
 
+  // ─── Idle session timeout state ──────────────────────────────────────────
+  const WARNING_DURATION_S = 120; // 2 minutes warning countdown
+  const [showTimeoutWarning, setShowTimeoutWarning] = useState(false);
+  const [timeoutSecondsLeft, setTimeoutSecondsLeft] = useState(WARNING_DURATION_S);
+  const countdownRef = React.useRef(null);
+
+  const stopCountdown = useCallback(() => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+  }, []);
+
+  /** Called by useIdleTimeout when the warning threshold is reached */
+  const handleIdleWarn = useCallback(() => {
+    setTimeoutSecondsLeft(WARNING_DURATION_S);
+    setShowTimeoutWarning(true);
+    stopCountdown();
+    countdownRef.current = setInterval(() => {
+      setTimeoutSecondsLeft((prev) => {
+        if (prev <= 1) {
+          stopCountdown();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [stopCountdown]);
+
+  /** Called by useIdleTimeout when the logout threshold is reached */
+  const handleIdleLogout = useCallback(async () => {
+    stopCountdown();
+    setShowTimeoutWarning(false);
+    await logout();
+  }, [logout, stopCountdown]);
+
+  /** "Stay Logged In" — dismiss the warning and reset timers */
+  const dismissTimeoutWarning = useCallback((resetIdleFn) => {
+    stopCountdown();
+    setShowTimeoutWarning(false);
+    setTimeoutSecondsLeft(WARNING_DURATION_S);
+    if (resetIdleFn) resetIdleFn();
+  }, [stopCountdown]);
+
+  /** "Log Out Now" from the timeout modal */
+  const confirmTimeoutLogout = useCallback(async () => {
+    stopCountdown();
+    setShowTimeoutWarning(false);
+    await logout();
+  }, [logout, stopCountdown]);
+
+  // Clean up countdown on unmount
+  useEffect(() => () => stopCountdown(), [stopCountdown]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const value = {
     user,
     loading,
@@ -89,7 +144,14 @@ export function AuthProvider({ children }) {
     refreshUser,
     updateVerificationStatus,
     isRole,
-    roleLabel: user ? ROLE_LABELS[user.role_key] : ''
+    roleLabel: user ? ROLE_LABELS[user.role_key] : '',
+    // Session timeout
+    showTimeoutWarning,
+    timeoutSecondsLeft,
+    handleIdleWarn,
+    handleIdleLogout,
+    dismissTimeoutWarning,
+    confirmTimeoutLogout
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

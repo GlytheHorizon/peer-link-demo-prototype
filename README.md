@@ -9,7 +9,7 @@
 | User Layer | Students · Tutors · Faculty · Administrators |
 | Presentation | React 18 + Vite (SPA) |
 | Application | Node.js + Express REST API |
-| Database | Supabase (PostgreSQL 15+, `pg` driver) |
+| Database | MySQL 5.7+ / 8.0+ / MariaDB (`mysql2` driver) |
 
 ---
 
@@ -122,7 +122,7 @@ const WEIGHTS = {
 
 ### Changing Demo Seed Data
 
-Re-run `database/schema.sql` in the Supabase SQL editor after editing the `INSERT` blocks at the bottom of the file.
+Re-run `database/schema.sql` or `database/reset.sql` in phpMyAdmin (SQL tab) after editing the `INSERT` blocks.
 
 ---
 
@@ -136,7 +136,7 @@ peerlink/
 ├── README.md                 This file
 │
 ├── database/
-│   ├── schema.sql            Full PostgreSQL schema (15 tables) + demo seed data
+│   ├── schema.sql            Full MySQL schema (21 tables) + demo seed data
 │   └── reschema.sql          Incremental migration patches (run after schema.sql)
 │
 ├── backend/                  Node.js + Express REST API
@@ -149,7 +149,7 @@ peerlink/
 │       │
 │       ├── config/
 │       │   ├── index.js      Central env config (port, CLIENT_URL, JWT)
-│       │   └── db.js         pg pool + query helper (MySQL-style ? → $1 shim)
+│       │   └── db.js         mysql2 connection pool + query helper
 │       │
 │       ├── middleware/
 │       │   ├── auth.js       JWT protect + restrictTo role guard
@@ -298,7 +298,7 @@ peerlink/
 
 ## 🗄 Database Schema
 
-15 tables in Supabase (PostgreSQL):
+21 tables in MySQL (phpMyAdmin ready):
 
 | Table | Purpose |
 |---|---|
@@ -322,19 +322,19 @@ peerlink/
 
 ## 🚀 Setup
 
-### 1. Database (Supabase)
+### 1. Database (MySQL / phpMyAdmin)
 
-1. Create a free project at [supabase.com](https://supabase.com)
-2. Go to **SQL Editor**, paste the full contents of `database/schema.sql`, and run it
-3. If upgrading an existing schema, also run `database/reschema.sql`
-4. Copy the **Direct connection** string (port 5432) from **Project Settings → Database**
+1. Open **phpMyAdmin** (e.g. `http://localhost/phpmyadmin`) or MySQL CLI
+2. Create a database named `peerlink`
+3. Select `peerlink`, go to the **Import** tab (or **SQL** tab), paste/select `database/schema.sql`, and execute
+4. If updating existing database structure, execute `database/reschema.sql`
 
 ### 2. Backend
 
 ```bat
 cd backend
 copy .env.example .env
-:: Fill in DATABASE_URL, JWT_SECRET, CLIENT_URL in .env
+:: Fill in DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET in .env
 npm install
 npm start
 :: Runs on http://localhost:5000
@@ -343,8 +343,11 @@ npm start
 **Required `.env` variables:**
 
 ```env
-DATABASE_URL=postgresql://...   # Supabase direct connection string
-DATABASE_SSL=true
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=peerlink
 JWT_SECRET=your-long-random-secret
 CLIENT_URL=http://localhost:5173
 PORT=5000
@@ -378,8 +381,10 @@ All `/api/*` requests rewrite to the backend; everything else serves the SPA.
 
    | Variable | Value |
    |---|---|
-   | `DATABASE_URL` | Supabase direct connection string |
-   | `DATABASE_SSL` | `true` |
+   | `DB_HOST` | MySQL host / address |
+   | `DB_USER` | MySQL username |
+   | `DB_PASSWORD` | MySQL password |
+   | `DB_NAME` | `peerlink` |
    | `JWT_SECRET` | A long random secret |
    | `CLIENT_URL` | `https://your-app.vercel.app` |
 
@@ -450,7 +455,7 @@ Scheduling conflicts (exact, partial, overlapping) are blocked while sessions ar
 - Passwords hashed with bcrypt (cost 10) — never stored plain
 - JWT HS256 signed; user re-fetched from DB on every protected request
 - Role guards enforce access at both route and controller level
-- All DB queries use parameterized placeholders (`$1, $2…`) — zero SQL injection risk
+- All DB queries use parameterized placeholders (`?`) — zero SQL injection risk
 - Admins cannot deactivate/delete their own account — enforced server-side
 - Suspend/ban checks run at login time — not just on page load
 
@@ -458,7 +463,7 @@ Scheduling conflicts (exact, partial, overlapping) are blocked while sessions ar
 
 ## ⚠️ Known Issues
 
-- Vercel cold starts may cause occasional 500 errors on auth endpoints due to PostgreSQL connection pool behavior with serverless functions. Local development is unaffected. See `backend/src/config/db.js` — consider per-request connections for Vercel cold-start robustness.
+- Ensure MySQL server (XAMPP / WAMP / Apache MySQL) is running before starting the backend API server.
 
 ---
 
