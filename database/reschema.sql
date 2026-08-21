@@ -1,23 +1,51 @@
 -- ============================================================
 -- reschema.sql
--- Idempotent schema + data update for EXISTING PeerLink MySQL databases.
--- Safe to re-run in phpMyAdmin or via MySQL CLI.
+-- Idempotent schema + data update for EXISTING PeerLink MySQL / MariaDB databases.
+-- Fully compatible with XAMPP (MariaDB & MySQL 5.7 / 8.0+ / phpMyAdmin).
 -- ============================================================
 
--- 1. MESSAGES — system messages support
-ALTER TABLE messages MODIFY sender_id BIGINT NULL;
-ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_system TINYINT(1) NOT NULL DEFAULT 0;
+DELIMITER $$
 
--- 2. SESSIONS — completion confirmations & learning mode
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS student_complete_confirmed_at DATETIME NULL;
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tutor_complete_confirmed_at DATETIME NULL;
-ALTER TABLE sessions ADD COLUMN IF NOT EXISTS learning_mode VARCHAR(20) NULL;
+DROP PROCEDURE IF EXISTS AddColumnIfNotExists $$
+CREATE PROCEDURE AddColumnIfNotExists(
+  IN p_table_name VARCHAR(64),
+  IN p_column_name VARCHAR(64),
+  IN p_column_def VARCHAR(255)
+)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = p_table_name
+      AND COLUMN_NAME = p_column_name
+  ) THEN
+    SET @s = CONCAT('ALTER TABLE `', p_table_name, '` ADD COLUMN `', p_column_name, '` ', p_column_def);
+    PREPARE stmt FROM @s;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END IF;
+END $$
 
--- 3. CONVERSATION PAYMENTS — session linking
-ALTER TABLE conversation_payments ADD COLUMN IF NOT EXISTS session_id BIGINT NULL;
-ALTER TABLE conversation_payments ADD COLUMN IF NOT EXISTS reject_reason VARCHAR(300) NULL;
+DELIMITER ;
 
--- 4. TUTOR APPLICATIONS — storage for tutor registration flow
+-- Apply column additions safely across all MySQL / MariaDB versions
+CALL AddColumnIfNotExists('messages', 'is_system', 'TINYINT(1) NOT NULL DEFAULT 0');
+CALL AddColumnIfNotExists('sessions', 'student_complete_confirmed_at', 'DATETIME NULL');
+CALL AddColumnIfNotExists('sessions', 'tutor_complete_confirmed_at', 'DATETIME NULL');
+CALL AddColumnIfNotExists('sessions', 'learning_mode', 'VARCHAR(20) NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'session_id', 'BIGINT NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'reject_reason', 'VARCHAR(300) NULL');
+CALL AddColumnIfNotExists('tutor_profiles', 'verification_status', "ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'");
+CALL AddColumnIfNotExists('users', 'suspended_until', 'DATETIME NULL');
+CALL AddColumnIfNotExists('users', 'suspension_reason', 'TEXT NULL');
+CALL AddColumnIfNotExists('users', 'is_banned', 'TINYINT(1) NOT NULL DEFAULT 0');
+CALL AddColumnIfNotExists('users', 'ban_reason', 'TEXT NULL');
+CALL AddColumnIfNotExists('users', 'name_changes_count', 'INT NOT NULL DEFAULT 0');
+CALL AddColumnIfNotExists('users', 'name_changes_reset_at', 'DATETIME NULL');
+
+DROP PROCEDURE IF EXISTS AddColumnIfNotExists;
+
+-- Ensure tables exist
 CREATE TABLE IF NOT EXISTS tutor_applications (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
   full_name      VARCHAR(200) NOT NULL,
@@ -40,7 +68,6 @@ CREATE TABLE IF NOT EXISTS tutor_applications (
   KEY idx_tutor_applications_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. USER REPORTS
 CREATE TABLE IF NOT EXISTS user_reports (
   id              BIGINT AUTO_INCREMENT PRIMARY KEY,
   reporter_id     BIGINT NOT NULL,
@@ -61,10 +88,6 @@ CREATE TABLE IF NOT EXISTS user_reports (
   CONSTRAINT fk_user_reports_session FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 6. TUTOR PROFILES — verification status
-ALTER TABLE tutor_profiles ADD COLUMN IF NOT EXISTS verification_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending';
-
--- 7. PASSWORD RESET TOKENS
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id      BIGINT NOT NULL,
@@ -78,12 +101,6 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 8. USER MODERATION & WARNINGS
-ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_until DATETIME NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned TINYINT(1) NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason TEXT NULL;
-
 CREATE TABLE IF NOT EXISTS user_warnings (
   id              BIGINT AUTO_INCREMENT PRIMARY KEY,
   user_id         BIGINT NOT NULL,
@@ -96,7 +113,3 @@ CREATE TABLE IF NOT EXISTS user_warnings (
   CONSTRAINT fk_user_warnings_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
   CONSTRAINT fk_user_warnings_admin FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 9. USERS — name change tracking
-ALTER TABLE users ADD COLUMN IF NOT EXISTS name_changes_count INT NOT NULL DEFAULT 0;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS name_changes_reset_at DATETIME NULL;
