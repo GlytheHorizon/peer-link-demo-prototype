@@ -133,8 +133,8 @@ const respond = asyncHandler(async (req, res) => {
   if (session.status !== 'pending') throw new ApiError(409, `Session is already ${session.status}`);
 
   if (decision === 'accepted') {
-    const startIso = session.scheduled_start.toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = session.scheduled_end.toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = new Date(session.scheduled_start).toISOString().slice(0, 19).replace('T', ' ');
+    const endIso = new Date(session.scheduled_end).toISOString().slice(0, 19).replace('T', ' ');
     if (await sessionModel.hasOverlap({ userId: req.user.id, start: startIso, end: endIso, excludeSessionId: session.id })) {
       throw new ApiError(409, 'You have an overlapping session at that time; reject or cancel it first');
     }
@@ -347,8 +347,8 @@ const respondRescheduleRequest = asyncHandler(async (req, res) => {
     if (Math.abs(proposedDuration - originalDuration) > 60 * 1000) {
       throw new ApiError(400, 'The proposed reschedule does not match the paid duration — ask for a new reschedule');
     }
-    const startIso = request.proposed_start.toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = request.proposed_end.toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = new Date(request.proposed_start).toISOString().slice(0, 19).replace('T', ' ');
+    const endIso = new Date(request.proposed_end).toISOString().slice(0, 19).replace('T', ' ');
     if (await sessionModel.hasOverlap({ userId: session.student_id, start: startIso, end: endIso, excludeSessionId: session.id })) {
       throw new ApiError(409, 'The new schedule conflicts with the student\'s other sessions');
     }
@@ -360,8 +360,8 @@ const respondRescheduleRequest = asyncHandler(async (req, res) => {
   await rescheduleRequestModel.setStatus(request.id, decision);
 
   if (decision === 'accepted') {
-    const startIso = request.proposed_start.toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = request.proposed_end.toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = new Date(request.proposed_start).toISOString().slice(0, 19).replace('T', ' ');
+    const endIso = new Date(request.proposed_end).toISOString().slice(0, 19).replace('T', ' ');
     await sessionModel.updateSchedule(session.id, startIso, endIso);
   }
 
