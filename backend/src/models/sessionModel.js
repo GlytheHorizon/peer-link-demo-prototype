@@ -27,30 +27,26 @@ const SESSION_SELECT = `
     LEFT JOIN tutor_subjects tsr ON tsr.tutor_profile_id = tpf.id AND tsr.subject_id = s.subject_id
     LEFT JOIN evaluations e ON e.session_id = s.id
     LEFT JOIN payments p ON p.session_id = s.id
-    LEFT JOIN LATERAL (
-      SELECT id, amount, status, created_at
-      FROM conversation_payments
+    LEFT JOIN conversation_payments cp ON cp.id = (
+      SELECT id FROM conversation_payments
       WHERE session_id = s.id AND status = 'accepted'
       ORDER BY id DESC LIMIT 1
-    ) cp ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT id, amount, status, created_at
-      FROM conversation_payments
+    )
+    LEFT JOIN conversation_payments cp2 ON cp2.id = (
+      SELECT id FROM conversation_payments
       WHERE session_id = s.id AND status = 'pending'
       ORDER BY id DESC LIMIT 1
-    ) cp2 ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT id, amount, reject_reason, created_at
-      FROM conversation_payments
+    )
+    LEFT JOIN conversation_payments cp3 ON cp3.id = (
+      SELECT id FROM conversation_payments
       WHERE session_id = s.id AND status = 'rejected'
       ORDER BY id DESC LIMIT 1
-    ) cp3 ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT id, requester_id, proposed_start, proposed_end, reason
-      FROM reschedule_requests
+    )
+    LEFT JOIN reschedule_requests rr ON rr.id = (
+      SELECT id FROM reschedule_requests
       WHERE session_id = s.id AND status = 'pending'
-      ORDER BY created_at DESC LIMIT 1
-    ) rr ON TRUE`;
+      ORDER BY created_at DESC, id DESC LIMIT 1
+    )`;
 
 async function findById(id) {
   const rows = await query(`${SESSION_SELECT} WHERE s.id = ?`, [id]);
@@ -96,7 +92,7 @@ async function updateStatus(id, status, rejectReason = null) {
 /** Cancels a session, optionally recording why (and when) it was cancelled. */
 async function cancel(id, reason = null) {
   await query(
-    'UPDATE sessions SET status = ?, cancel_reason = ?, cancelled_at = now() WHERE id = ?',
+    'UPDATE sessions SET status = ?, cancel_reason = ?, cancelled_at = NOW() WHERE id = ?',
     ['cancelled', reason, id]
   );
 }
@@ -110,7 +106,7 @@ async function confirmCompletion(id, side) {
   const other = side === 'student' ? 'tutor_complete_confirmed_at' : 'student_complete_confirmed_at';
   await query(
     `UPDATE sessions
-     SET ${column} = now(),
+     SET ${column} = NOW(),
          status = CASE
            WHEN ${other} IS NOT NULL THEN 'completed'
            ELSE status
