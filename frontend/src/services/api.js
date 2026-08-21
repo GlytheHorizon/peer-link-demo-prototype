@@ -17,6 +17,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
     const token = getToken();
+    console.log(`[apiFetch] ${method} ${path} - token:`, token ? 'present' : 'MISSING');
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
@@ -28,6 +29,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
       body: body !== undefined ? JSON.stringify(body) : undefined
     });
   } catch (err) {
+    console.error(`[apiFetch] ${method} ${path} - network error:`, err);
     return { ok: false, status: 0, message: 'Cannot reach the server. Is the backend running?', data: null };
   }
 
@@ -38,6 +40,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
     /* non-JSON response */
   }
 
+  console.log(`[apiFetch] ${method} ${path} - response:`, res.status, payload);
   if (!res.ok) {
     return {
       ok: false,

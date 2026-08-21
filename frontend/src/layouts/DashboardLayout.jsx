@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { conversationService, tabUpdateService } from '../services';
+import WarningToast from '../components/WarningToast';
 
 const SEEN_PREFIX = 'peerlink_tab_seen';
 
@@ -67,13 +68,16 @@ function LogoNode() {
 }
 
 export default function DashboardLayout({ children }) {
-  const { user, logout, roleLabel } = useAuth();
+  const { user, logout, roleLabel, refreshUser } = useAuth();
   const confirm = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
   const [unread, setUnread] = useState(0);
   const [tabUpdates, setTabUpdates] = useState({});
   const [open, setOpen] = useState(false);
+
+  // Tutor approval status derived from user.verification_status (updated via refreshUser)
+  const tutorApproved = user?.role_key === 'tutor' ? user.verification_status === 'approved' : true;
 
   const refreshUnread = () => {
     conversationService.unreadCount().then((res) => {
@@ -127,7 +131,22 @@ export default function DashboardLayout({ children }) {
     return !seenTs || new Date(latest).getTime() > new Date(seenTs).getTime();
   };
 
-  const items = NAV[user?.role_key] || NAV.student;
+  const getNavItems = () => {
+    if (user?.role_key === 'tutor') {
+      if (!tutorApproved) {
+        // Unapproved tutors only see Profile and Verification
+        return [
+          { to: '/profile', label: 'Profile', icon: '✎' },
+          { to: '/verification', label: 'Verification', icon: '✓' }
+        ];
+      }
+      // Approved tutors see full nav
+      return NAV.tutor;
+    }
+    return NAV[user?.role_key] || NAV.student;
+  };
+
+  const items = getNavItems();
 
   const handleLogout = async () => {
     const ok = await confirm({
@@ -179,6 +198,7 @@ export default function DashboardLayout({ children }) {
         </header>
         <main className="content">{children}</main>
       </div>
+      <WarningToast userId={user?.id} />
     </div>
   );
 }

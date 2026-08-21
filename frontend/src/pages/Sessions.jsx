@@ -128,6 +128,13 @@ function TutorSessionCard({
           {s.status === 'completed' && rating && <span className="sc-rating">★ {rating}</span>}
         </div>
         <div className="sc-sub">{dateLabel} · {timeLabel}</div>
+
+        {s.status === 'accepted' && s.rejected_payment_id && !s.payment_id && (
+          <p className="sc-note sc-note--red payment-rejection-note">
+            Payment was rejected{s.payment_reject_reason ? ` — Reason: ${s.payment_reject_reason}` : ''}
+          </p>
+        )}
+
         {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
           <p className="sc-note sc-note--amber">
             {s.student_name} sent a payment request{s.pending_amount ? ` of ₱${Number(s.pending_amount).toLocaleString()}` : ''} —{' '}
@@ -164,25 +171,20 @@ function TutorSessionCard({
             <button className="action-btn action-btn--reject" onClick={() => onReject(s)}>Reject</button>
           </>
         )}
-        {s.status === 'accepted' && (
-          <>
-            {s.pending_payment_id && !s.payment_id && (
-              <button className="action-btn action-btn--accept" onClick={() => onConfirmPayment(s)}>
-                Confirm payment
-              </button>
-            )}
-            {hasPendingReq && !myRequest && (
-              <>
-                <button className="action-btn action-btn--chat" onClick={() => onConfirmReschedule(s)}>Confirm</button>
-                <button className="action-btn action-btn--cancel" onClick={() => onDeclineReschedule(s)}>Decline</button>
-              </>
-            )}
-            <button className="action-btn action-btn--solid" onClick={() => onChat(s)}>Chat</button>
-            {!s.payment_id && (
-              <button className="action-btn action-btn--outline-danger" onClick={() => onCancel(s)}>Cancel</button>
-            )}
-          </>
-        )}
+{s.status === 'accepted' && (
+            <>
+              {hasPendingReq && !myRequest && (
+                <>
+                  <button className="action-btn action-btn--chat" onClick={() => onConfirmReschedule(s)}>Confirm</button>
+                  <button className="action-btn action-btn--cancel" onClick={() => onDeclineReschedule(s)}>Decline</button>
+                </>
+              )}
+              <button className="action-btn action-btn--solid" onClick={() => onChat(s)}>Chat</button>
+              {!s.payment_id && (
+                <button className="action-btn action-btn--outline-danger" onClick={() => onCancel(s)}>Cancel</button>
+              )}
+            </>
+          )}
         {s.status !== 'accepted' && (
           <ChatIconButton onClick={() => onChat(s)} label={`Open conversation with ${s.student_name}`} />
         )}
@@ -439,7 +441,7 @@ export default function Sessions() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const sessions = useApi(sessionService.list, [], 10000);
+  const sessions = useApi(sessionService.list, [], 5000);
   const [filter, setFilter] = useState('upcoming');
   const [paying, setPaying] = useState(null);
   const [rescheduling, setRescheduling] = useState(null);
@@ -481,20 +483,6 @@ export default function Sessions() {
   const chatTutor = async (s) => openSessionChat(s, 'student');
 
   const chatStudent = async (s) => openSessionChat(s, 'tutor');
-
-  const confirmPayment = async (s) => {
-    if (!s.conversation_id || !s.pending_payment_id) return;
-    const amount = s.pending_amount ? ` of ₱${Number(s.pending_amount).toLocaleString()}` : '';
-    const ok = await confirm({
-      title: 'Confirm payment?',
-      message: `Accept ${s.student_name}'s payment${amount} for the ${s.subject_name} session?`,
-      confirmText: 'Accept payment'
-    });
-    if (!ok) return;
-    const res = await conversationService.acceptPayment(s.conversation_id, s.pending_payment_id);
-    if (res.ok) { setNotice({ type: 'success', text: res.message }); sessions.reload(); }
-    else setNotice({ type: 'error', text: res.message });
-  };
 
   const cancelSession = async (s) => {
     const paid = s.payment_id ? ` This session has already been paid${s.payment_amount ? ` (₱${Number(s.payment_amount).toLocaleString()})` : ''} — there is no refund.` : '';
@@ -543,7 +531,12 @@ export default function Sessions() {
     <div>
       <div className="page-head">
         <h2>Sessions</h2>
-        {!isTutor && <Link className="btn btn-primary" to="/sessions/new">+ Request session</Link>}
+        <div className="page-head-actions">
+          <button className="btn btn-ghost btn-sm" onClick={() => sessions.reload()} disabled={sessions.loading} title="Refresh">
+            ⟳ Refresh
+          </button>
+          {!isTutor && <Link className="btn btn-primary" to="/sessions/new">+ Request session</Link>}
+        </div>
       </div>
       {sessions.loading && <Spinner />}
       {sessions.error && <Alert type="error">{sessions.error.message}</Alert>}
@@ -622,7 +615,6 @@ export default function Sessions() {
               onReject={setRejecting}
               onConfirmReschedule={(x) => respondReschedule(x, 'accepted')}
               onDeclineReschedule={(x) => respondReschedule(x, 'rejected')}
-              onConfirmPayment={confirmPayment}
               hasPendingReq={hasPendingReq}
               myRequest={myRequest}
             />
@@ -648,7 +640,7 @@ export default function Sessions() {
                 <div className="session-pills">
                   <span className="pill pill--neutral">{dayTag(start)}</span>
                   <span className="pill pill--neutral">{fmtRange(start, end)}</span>
-                  <span className={`pill ${meta.cls}`}>{meta.label}</span>
+                  <span className={`pill ${meta.cls}`}>{statusLabel}</span>
                   {s.learning_mode && <span className="pill pill--neutral">Learning: {modeLabel(s.learning_mode)}</span>}
                   {!isTutor && s.status === 'accepted' && !s.payment_id && s.pending_payment_id && (
                     <span className="pill pill--pending">Payment pending — awaiting tutor confirmation</span>
@@ -658,11 +650,18 @@ export default function Sessions() {
                       {myRequest ? 'Awaiting Confirmation' : 'Reschedule Requested'}
                     </span>
                   )}
-                </div>
-                {s.status === 'rejected' && s.reject_reason && (
+</div>
+
+{s.status === 'accepted' && s.rejected_payment_id && !s.payment_id && (
+                  <p className="session-card-note session-card-note--error payment-rejection-note">
+                    Payment rejected{s.payment_reject_reason ? ` — ${s.payment_reject_reason}` : ''}
+                  </p>
+                )}
+
+{s.status === 'rejected' && s.reject_reason && (
                   <p className="session-card-note">Rejected reason: {s.reject_reason}</p>
                 )}
-                {s.status === 'cancelled' && (
+{s.status === 'cancelled' && (
                   <p className="session-card-note">
                     {s.cancel_reason && <>Cancellation reason: {s.cancel_reason}. </>}
                     Cancelled {fmtDateTime(s.cancelled_at || s.updated_at)}

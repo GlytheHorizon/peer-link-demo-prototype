@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useApi } from '../hooks/useApi';
-import { tutorService, sessionService, matchService, reportService, adminService } from '../services';
+import { tutorService, sessionService, matchService, reportService } from '../services';
 import { Spinner, Alert, formatDateTime } from '../components/ui';
 
 const RATE_PER_HOUR = 100;
@@ -162,6 +162,14 @@ function TutorDashboard() {
   const profile = useApi(tutorService.getMe, [], 20000);
   const sessions = useApi(sessionService.list, [], 15000);
   const [notice, setNotice] = useState(null);
+
+  // Check if tutor is approved - profile.data should have verification_status or status
+  const isApproved = profile.data?.verification_status === 'approved' || profile.data?.status === 'approved';
+
+  // For unapproved tutors, redirect to verification page
+  if (profile.data && !isApproved) {
+    return <Navigate to="/verification" replace />;
+  }
 
   const all = sessions.data || [];
   const pending = all
@@ -399,53 +407,10 @@ function FacultyDashboard() {
   );
 }
 
-function AdminDashboard() {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-
-  useEffect(() => {
-    adminService.stats().then((res) => {
-      if (res.ok) setStats(res.data);
-      else setErr(res.message);
-      setLoading(false);
-    });
-  }, []);
-
-  const s = stats || {};
-  const cards = [
-    ['Users', s.users, '/admin/users'],
-    ['Subjects', s.subjects, '/admin/subjects'],
-    ['Sessions', s.sessions, '/reports'],
-    ['Evaluations', s.evaluations, '/reports'],
-    ['Conversations', s.conversations, null],
-    ['Messages', s.messages, null],
-    ['Activity logs', s.activity_logs, '/admin/logs'],
-    ['Inactive users', s.inactive_users, '/admin/users']
-  ];
-
-  return (
-    <div>
-      <h2>Admin Dashboard</h2>
-      {loading && <Spinner />}
-      <Alert type="error">{err}</Alert>
-      {stats && (
-        <div className="stat-cards">
-          {cards.map(([label, value, to]) => (
-            <Link to={to || '/dashboard'} className="stat-card link-card" key={label}>
-              <b>{value}</b><span>{label}</span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function RoleDashboard() {
   const { user } = useAuth();
   if (user?.role_key === 'student') return <StudentDashboard />;
   if (user?.role_key === 'tutor') return <TutorDashboard />;
   if (user?.role_key === 'faculty') return <FacultyDashboard />;
-  return <AdminDashboard />;
+  return <Navigate to="/admin/verifications" replace />;
 }

@@ -150,7 +150,8 @@ export default function TutorVerifications() {
             />
           </div>
         ) : (
-          <table className="table verify-table">
+          <div className="table-wrap table-responsive">
+            <table className="table verify-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -187,8 +188,9 @@ export default function TutorVerifications() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        )}
+</table>
+            </div>
+          )}
       </div>
 
       {selected && (

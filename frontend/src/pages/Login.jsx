@@ -68,7 +68,7 @@ export default function Login() {
             <div className="pwd-row">
               <label htmlFor="login-password">Password</label>
               <span className="forgot">
-                <a href="#" onClick={(e) => e.preventDefault()}>Forgot Password?</a>
+                <Link to="/forgot-password">Forgot Password?</Link>
               </span>
             </div>
             <input

@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { studentService, conversationService } from '../services';
+import { studentService, conversationService, reportService } from '../services';
 import { Spinner, Alert, formatDate, EmptyState } from '../components/ui';
+import ReportModal from '../components/ReportModal';
 
 const STRAND_LABELS = { STEM: 'STEM', GAS: 'GAS', ICT: 'ICT', ABM: 'ABM', HUMSS: 'HUMSS', JHS: 'JHS (Grade 7-10)' };
 
@@ -36,6 +37,7 @@ export default function StudentProfile() {
   const [err, setErr] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     studentService.getPublic(id).then((res) => {
@@ -89,6 +91,9 @@ export default function StudentProfile() {
             <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
               {busy ? 'Starting…' : '✉ Chat'}
             </button>
+            <button className="btn btn-outline" onClick={() => setShowReportModal(true)} title="Report user">
+              ⚠ Report
+            </button>
           </div>
         )}
       </div>
@@ -116,6 +121,14 @@ export default function StudentProfile() {
           <InfoRow label="Bio" value={student.bio} />
         </div>
       </div>
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportedUserId={student.user_id}
+        reportedUserName={student.full_name}
+        reporterRole={user.role_key}
+      />
     </div>
   );
 }

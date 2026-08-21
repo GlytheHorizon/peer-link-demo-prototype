@@ -25,7 +25,6 @@ export default function Register() {
     age: '',
     email: '',
     grade_level: '',
-    role: 'student',
     school: '',
     password: '',
     confirm: ''
@@ -109,8 +108,8 @@ export default function Register() {
       password: form.password,
       first_name: parts.shift(),
       last_name: parts.join(' ') || parts.shift(),
-      role: form.role,
-      year_level: form.role === 'student' && grade ? grade.level : undefined,
+      role: 'student',
+      year_level: grade ? grade.level : undefined,
       age: Number(form.age),
       grade_level: form.grade_level,
       school: form.school.trim(),
@@ -118,7 +117,7 @@ export default function Register() {
       learning_mode: mode,
       preferred_schedule: schedule,
       preferred_time: time === 'Custom time' ? customTime.trim() : time,
-      ...(form.role === 'student' ? { subjects_needed: subjects } : { subjects_teach: subjects })
+      subjects_needed: subjects
     });
     setBusy(false);
     if (res.ok) navigate('/dashboard');
@@ -135,7 +134,7 @@ export default function Register() {
         <div className="brand-side"><span className="logo-dot" /> PeerLink</div>
         <h1>Create your account</h1>
         <p className="muted">
-          Join as a student needing help — or as a tutor ready to teach.
+          Join as a student needing help.
         </p>
 
         <div className="wizard-bars" aria-label={`Step ${step} of 3`}>
@@ -170,11 +169,6 @@ export default function Register() {
             </div>
             <label>Email</label>
             <input type="email" value={form.email} onChange={set('email')} required autoComplete="email" />
-            <label>Role</label>
-            <select value={form.role} onChange={set('role')}>
-              <option value="student">Student (I need help)</option>
-              <option value="tutor">Tutor (I want to teach)</option>
-            </select>
             <label>School</label>
             <input value={form.school} onChange={set('school')} placeholder="e.g. Quezon City High School" required />
             <div className="grid-2">
@@ -207,9 +201,7 @@ export default function Register() {
             </fieldset>
 
             <fieldset className="wizard-fieldset">
-              <legend>
-                {form.role === 'student' ? 'Subjects I need help with' : 'Subjects I can help with'}
-              </legend>
+              <legend>Subjects I need help with</legend>
               <div className="day-picker">
                 {SUBJECT_OPTIONS.map((s) => (
                   <Chip key={s} active={subjects.includes(s)} onClick={() => toggleIn(subjects, setSubjects, s)}>{s}</Chip>

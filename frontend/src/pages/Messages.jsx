@@ -130,7 +130,10 @@ function PaymentCard({ payment, conv, user, session, onChanged }) {
           </p>
         )}
         {payment.status === 'rejected' && payment.reject_reason && (
-          <p className="muted small">Reason: {payment.reject_reason}</p>
+          <div className="payment-reject-reason">
+            <span className="reject-reason-label">Rejection reason:</span>
+            <span className="reject-reason-text">{payment.reject_reason}</span>
+          </div>
         )}
         {payment.status === 'rejected' && !isTutor && (
           <p className="payment-note">You can send a new payment from <Link to="/sessions">My Sessions</Link>.</p>

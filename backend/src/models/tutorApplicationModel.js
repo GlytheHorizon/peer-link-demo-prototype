@@ -71,4 +71,4 @@ async function remove(id) {
   await query('DELETE FROM tutor_applications WHERE id = ?', [id]);
 }
 
-module.exports = { create, findById, list, setStatus, updateFiles, remove };
+module.exports = { create, findById, findByEmail, list, setStatus, updateFiles, remove };

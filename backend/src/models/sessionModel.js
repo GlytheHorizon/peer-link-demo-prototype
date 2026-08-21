@@ -9,36 +9,48 @@ const SESSION_SELECT = `
          COALESCE(p.amount, cp.amount) AS payment_amount,
          COALESCE(p.status, cp.status) AS payment_status,
          COALESCE(p.created_at, cp.created_at) AS paid_at,
-         cp2.id AS pending_payment_id, cp2.amount AS pending_amount, cp2.created_at AS pending_at,
+         CASE WHEN cp.id IS NULL THEN cp2.id END AS pending_payment_id,
+         CASE WHEN cp.id IS NULL THEN cp2.amount END AS pending_amount,
+         CASE WHEN cp.id IS NULL THEN cp2.created_at END AS pending_at,
+         CASE WHEN cp.id IS NULL THEN cp3.id END AS rejected_payment_id,
+         CASE WHEN cp.id IS NULL THEN cp3.amount END AS rejected_amount,
+         CASE WHEN cp.id IS NULL THEN cp3.reject_reason END AS payment_reject_reason,
+         CASE WHEN cp.id IS NULL THEN cp3.created_at END AS rejected_at,
          tsr.rate_per_hour, s.reject_reason, s.cancel_reason,
          rr.id AS reschedule_request_id, rr.requester_id AS reschedule_requester_id,
          rr.proposed_start AS reschedule_start, rr.proposed_end AS reschedule_end, rr.reason AS reschedule_reason
-  FROM sessions s
-  JOIN subjects sub ON sub.id = s.subject_id
-  JOIN users stu ON stu.id = s.student_id
-  JOIN users tut ON tut.id = s.tutor_id
-  LEFT JOIN tutor_profiles tpf ON tpf.user_id = tut.id
-  LEFT JOIN tutor_subjects tsr ON tsr.tutor_profile_id = tpf.id AND tsr.subject_id = s.subject_id
-  LEFT JOIN evaluations e ON e.session_id = s.id
-  LEFT JOIN payments p ON p.session_id = s.id
-  LEFT JOIN LATERAL (
-    SELECT id, amount, status, created_at
-    FROM conversation_payments
-    WHERE session_id = s.id AND status = 'accepted'
-    ORDER BY id DESC LIMIT 1
-  ) cp ON TRUE
-  LEFT JOIN LATERAL (
-    SELECT id, amount, status, created_at
-    FROM conversation_payments
-    WHERE session_id = s.id AND status = 'pending'
-    ORDER BY id DESC LIMIT 1
-  ) cp2 ON TRUE
-  LEFT JOIN LATERAL (
-    SELECT id, requester_id, proposed_start, proposed_end, reason
-    FROM reschedule_requests
-    WHERE session_id = s.id AND status = 'pending'
-    ORDER BY created_at DESC LIMIT 1
-  ) rr ON TRUE`;
+    FROM sessions s
+    JOIN subjects sub ON sub.id = s.subject_id
+    JOIN users stu ON stu.id = s.student_id
+    JOIN users tut ON tut.id = s.tutor_id
+    LEFT JOIN tutor_profiles tpf ON tpf.user_id = tut.id
+    LEFT JOIN tutor_subjects tsr ON tsr.tutor_profile_id = tpf.id AND tsr.subject_id = s.subject_id
+    LEFT JOIN evaluations e ON e.session_id = s.id
+    LEFT JOIN payments p ON p.session_id = s.id
+    LEFT JOIN LATERAL (
+      SELECT id, amount, status, created_at
+      FROM conversation_payments
+      WHERE session_id = s.id AND status = 'accepted'
+      ORDER BY id DESC LIMIT 1
+    ) cp ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT id, amount, status, created_at
+      FROM conversation_payments
+      WHERE session_id = s.id AND status = 'pending'
+      ORDER BY id DESC LIMIT 1
+    ) cp2 ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT id, amount, reject_reason, created_at
+      FROM conversation_payments
+      WHERE session_id = s.id AND status = 'rejected'
+      ORDER BY id DESC LIMIT 1
+    ) cp3 ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT id, requester_id, proposed_start, proposed_end, reason
+      FROM reschedule_requests
+      WHERE session_id = s.id AND status = 'pending'
+      ORDER BY created_at DESC LIMIT 1
+    ) rr ON TRUE`;
 
 async function findById(id) {
   const rows = await query(`${SESSION_SELECT} WHERE s.id = ?`, [id]);

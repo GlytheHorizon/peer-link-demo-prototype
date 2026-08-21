@@ -35,8 +35,8 @@ export function InfoBox({ label, value }) {
 
 export function Modal({ title, onClose, children, className = '' }) {
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal ${className}`} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className={`modal ${className}`}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="btn btn-ghost" onClick={onClose}>×</button>

@@ -40,4 +40,19 @@ const getUser = asyncHandler(async (req, res) => {
   ok(res, 200, user);
 });
 
-module.exports = { getMe, updateMe, heartbeat, listUsers, getUser };
+/** GET /api/users/me/warnings/unacknowledged — fetch unacknowledged warnings for current user. */
+const getWarnings = asyncHandler(async (req, res) => {
+  const warnings = await userModel.getUnacknowledgedWarnings(req.user.id);
+  ok(res, 200, warnings);
+});
+
+/** POST /api/users/warnings/:id/acknowledge — acknowledge a specific warning. */
+const acknowledgeWarning = asyncHandler(async (req, res) => {
+  const warningId = Number(req.params.id);
+  const success = await userModel.acknowledgeWarning({ warningId, userId: req.user.id });
+  if (!success) throw new ApiError(404, 'Warning not found or already acknowledged');
+  log(req, 'users.acknowledge_warning', 'user_warning', warningId);
+  ok(res, 200, null, 'Warning acknowledged');
+});
+
+module.exports = { getMe, updateMe, heartbeat, listUsers, getUser, getWarnings, acknowledgeWarning };

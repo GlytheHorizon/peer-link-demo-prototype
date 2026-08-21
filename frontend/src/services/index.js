@@ -9,9 +9,17 @@ const toQuery = (params = {}) => {
   return qs.toString();
 };
 
+export const authService = {
+  requestPasswordReset: (email) => apiFetch('/auth/forgot-password', { method: 'POST', body: { email } }),
+  resetPassword: (token, password) => apiFetch('/auth/reset-password', { method: 'POST', body: { token, password } }),
+  checkEmailExists: (email) => apiFetch(`/auth/email-exists?email=${encodeURIComponent(email)}`)
+};
+
 export const userService = {
   updateMe: (payload) => apiFetch('/users/me', { method: 'PUT', body: payload }),
-  heartbeat: () => apiFetch('/users/heartbeat', { method: 'POST' })
+  heartbeat: () => apiFetch('/users/heartbeat', { method: 'POST' }),
+  getUnacknowledgedWarnings: () => apiFetch('/users/me/warnings/unacknowledged'),
+  acknowledgeWarning: (id) => apiFetch(`/users/warnings/${id}/acknowledge`, { method: 'POST', body: {} })
 };
 
 export const studentService = {
@@ -127,6 +135,9 @@ export const adminService = {
   getApplication: (id) => apiFetch(`/admin/tutor-applications/${id}`),
   approveApplication: (id) => apiFetch(`/admin/tutor-applications/${id}/approve`, { method: 'POST', body: {} }),
   rejectApplication: (id) => apiFetch(`/admin/tutor-applications/${id}/reject`, { method: 'POST', body: {} }),
+  warnUser: (id, reason) => apiFetch(`/admin/users/${id}/warn`, { method: 'POST', body: { reason } }),
+  suspendUser: (id, payload) => apiFetch(`/admin/users/${id}/suspend`, { method: 'POST', body: payload }),
+  banUser: (id, reason) => apiFetch(`/admin/users/${id}/ban`, { method: 'POST', body: { reason } }),
   getApplicationFile: async (id, field) => {
     const token = getToken();
     const res = await fetch(`/api/admin/tutor-applications/${id}/file/${field}`, {
@@ -142,7 +153,10 @@ export const reportService = {
   overview: () => apiFetch('/reports/overview'),
   sessions: () => apiFetch('/reports/sessions'),
   tutors: () => apiFetch('/reports/tutors'),
-  students: () => apiFetch('/reports/students')
+  students: () => apiFetch('/reports/students'),
+  createUserReport: (payload) => apiFetch('/reports/user', { method: 'POST', body: payload }),
+  listUserReports: (status) => apiFetch(`/reports/user${status ? `?status=${status}` : ''}`),
+  resolveUserReport: (id, payload) => apiFetch(`/reports/user/${id}`, { method: 'PATCH', body: typeof payload === 'string' ? { action: payload } : payload })
 };
 
 export const activityLogService = {

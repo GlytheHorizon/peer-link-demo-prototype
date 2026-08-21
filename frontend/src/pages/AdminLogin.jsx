@@ -69,7 +69,7 @@ export default function AdminLogin() {
             required
           />
 
-          <Alert type="error">{error}</Alert>
+          {error && <Alert type="error">{error}</Alert>}
 
           <button className="btn btn-primary btn-block" disabled={busy}>
             {busy ? 'Signing in…' : 'Login'}

@@ -11,10 +11,11 @@ const STATUS_META = {
 };
 
 export default function Verification() {
-  const { user } = useAuth();
+  const { user, refreshUser, updateVerificationStatus } = useAuth();
   const [app, setApp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const handledRef = React.useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -25,7 +26,23 @@ export default function Verification() {
     setLoading(false);
   }, []);
 
+  const handleManualRefresh = async () => {
+    await refreshUser();
+    await load();
+  };
+
   useEffect(() => { load(); }, [load]);
+
+  // Refresh user data when status becomes approved so sidebar updates
+  useEffect(() => {
+    if (app?.status === 'approved' && user?.verification_status !== 'approved' && !handledRef.current) {
+      handledRef.current = true;
+      console.log('[Verification] Status approved, refreshing user...');
+      refreshUser();
+      // Fallback: directly update local state since we know the status from myApplication
+      updateVerificationStatus('approved');
+    }
+  }, [app?.status, user?.verification_status, refreshUser, updateVerificationStatus]);
 
   if (loading) return <Spinner />;
 
@@ -99,6 +116,9 @@ export default function Verification() {
           ) : (
             <Link className="btn btn-primary" to="/profile">Update Profile</Link>
           )}
+          <button className="btn btn-outline" onClick={handleManualRefresh} style={{ marginLeft: 8 }}>
+            Refresh Status
+          </button>
         </div>
       </section>
     </div>

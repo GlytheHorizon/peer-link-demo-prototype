@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -170,72 +170,78 @@ const REPORT_ACTIONS = [
   { key: 'ban', label: 'Ban account', tone: 'danger', danger: true }
 ];
 
-const INITIAL_REPORTS = [
-  {
-    id: 1,
-    reporter: 'Bernard Bestil',
-    reporter_role: 'Student',
-    reported: 'Anna Cruz',
-    reported_role: 'Tutor',
-    reason: 'Tutor Missed Session',
-    session: 'Mathematics · Mar 12, 2026, 3:00 PM',
-    submitted: '2026-08-18T09:24:00+08:00',
-    details: 'The tutor confirmed the session but never showed up. I waited in the meeting room for the full hour and there was no response to my messages.',
-    status: 'open'
-  },
-  {
-    id: 2,
-    reporter: 'Gino Valdez',
-    reporter_role: 'Student',
-    reported: 'Gerome Valdez',
-    reported_role: 'Tutor',
-    reason: 'Tutor Missed Session',
-    session: 'Physics · Mar 14, 2026, 5:00 PM',
-    submitted: '2026-08-19T14:02:00+08:00',
-    details: 'The session was accepted but the tutor did not join the call and has not replied since. I rescheduled once already.',
-    status: 'open'
-  },
-  {
-    id: 3,
-    reporter: 'Jess Quinto',
-    reporter_role: 'Tutor',
-    reported: 'Elsa Quinto',
-    reported_role: 'Student',
-    reason: 'Tutor Missed Session',
-    session: 'English · Mar 15, 2026, 10:00 AM',
-    submitted: '2026-08-19T18:40:00+08:00',
-    details: 'The student booked a session and then did not attend. No notice was given before the scheduled time.',
-    status: 'open'
-  }
+const REPORT_REASONS = [
+  'Tutor Missed Session',
+  'Student Missed Session',
+  'Inappropriate Behavior',
+  'Harassment',
+  'Spam / Fake Account',
+  'Payment Issue',
+  'Other'
 ];
 
 function UserReports() {
   const confirm = useConfirm();
-  const [reports, setReports] = useState(INITIAL_REPORTS);
+  const [reports, setReports] = useState([]);
   const [selected, setSelected] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const data = useApi(() => reportService.listUserReports('open'), [refreshKey]);
+  const loading = data.loading;
+  const error = data.error;
+
+  useEffect(() => {
+    if (data.data) {
+      setReports(data.data);
+    }
+  }, [data.data]);
+
+  const [pendingAction, setPendingAction] = useState(null); // { actionKey: string, actionLabel: string }
+  const [actionReason, setActionReason] = useState('');
+  const [durationDays, setDurationDays] = useState('7');
 
   const openReports = reports.filter((r) => r.status === 'open');
 
-  const resolve = (id, actionLabel) => {
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'resolved', action: actionLabel } : r)));
-    setSelected(null);
-    setMsg({ type: 'success', text: `Report resolved — ${actionLabel}.` });
+  const resolve = async (id, payload) => {
+    try {
+      await reportService.resolveUserReport(id, payload);
+      const actionKey = typeof payload === 'string' ? payload : payload.action;
+      setReports((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'resolved', action_taken: actionKey } : r)));
+      setSelected(null);
+      setPendingAction(null);
+      setActionReason('');
+      setMsg({ type: 'success', text: `Report resolved — ${actionKey}.` });
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message || 'Failed to resolve report' });
+    }
   };
 
-  const handleAction = async (report, action) => {
-    if (action.danger) {
-      const ok = await confirm({
-        title: `${action.label}?`,
-        message: `${action.label} ${report.reported} based on this report?\nThis will affect their account access.`,
-        confirmText: action.label,
-        cancelText: 'Cancel',
-        danger: true
-      });
-      if (!ok) return;
+  const handleActionClick = (report, action) => {
+    if (action.key === 'dismiss') {
+      resolve(report.id, 'dismiss');
+      return;
     }
-    resolve(report.id, action.label);
+    setPendingAction(action);
+    setActionReason(`Reported for ${report.reason}.`);
   };
+
+  const handleConfirmAction = () => {
+    if (!selected || !pendingAction) return;
+    if (!actionReason.trim()) {
+      setMsg({ type: 'error', text: 'Reason is required' });
+      return;
+    }
+    const payload = {
+      action: pendingAction.key,
+      reason: actionReason.trim(),
+      duration_days: pendingAction.key === 'suspend' ? Number(durationDays) : undefined
+    };
+    resolve(selected.id, payload);
+  };
+
+  if (loading) return <Spinner />;
 
   return (
     <div>
@@ -254,6 +260,7 @@ function UserReports() {
         </div>
       </div>
 
+      {error && <Alert type="error">{error.message}</Alert>}
       {msg && <Alert type={msg.type}>{msg.text}</Alert>}
 
       <div className="card verify-table-card">
@@ -278,11 +285,11 @@ function UserReports() {
               {openReports.map((report) => (
                 <tr key={report.id}>
                   <td className="verify-name">
-                    {report.reporter}
+                    {report.reporter_name}
                     <div className="muted small cap">{report.reporter_role}</div>
                   </td>
                   <td>
-                    {report.reported}
+                    {report.reported_name}
                     <div className="muted small cap">{report.reported_role}</div>
                   </td>
                   <td className="verify-subject">{report.reason}</td>
@@ -291,7 +298,7 @@ function UserReports() {
                       <button
                         type="button"
                         className="btn btn-review btn-sm"
-                        onClick={() => setSelected(report)}
+                        onClick={() => { setSelected(report); setPendingAction(null); }}
                       >
                         Review
                       </button>
@@ -305,41 +312,84 @@ function UserReports() {
       </div>
 
       {selected && (
-        <Modal title="Review Report" onClose={() => setSelected(null)} className="verify-modal">
+        <Modal title="Review Report" onClose={() => { setSelected(null); setPendingAction(null); }} className="verify-modal">
           <div className="verify-profile">
             <div className="verify-profile-head">
-              <div className="verify-avatar">{initials(selected.reported)}</div>
+              <div className="verify-avatar">{initials(selected.reported_name)}</div>
               <div>
-                <h3>{selected.reported}</h3>
+                <h3>{selected.reported_name}</h3>
                 <p className="muted cap">{selected.reported_role} · {selected.reason}</p>
               </div>
             </div>
 
             <div className="review-grid">
-              <InfoBox label="Reporter" value={`${selected.reporter} · ${selected.reporter_role}`} />
-              <InfoBox label="Reported user" value={`${selected.reported} · ${selected.reported_role}`} />
+              <InfoBox label="Reporter" value={`${selected.reporter_name} · ${selected.reporter_role}`} />
+              <InfoBox label="Reported user" value={`${selected.reported_name} · ${selected.reported_role}`} />
               <InfoBox label="Reason" value={selected.reason} />
-              <InfoBox label="Submitted" value={formatDateTime(selected.submitted)} />
-              <InfoBox label="Related session" value={selected.session} />
+              <InfoBox label="Submitted" value={formatDateTime(selected.created_at)} />
+              <InfoBox label="Related session" value={selected.session_topic ? `${selected.session_topic} · ${formatDateTime(selected.session_start)}` : 'Not specified'} />
             </div>
 
             <div className="verify-bio">
               <span className="info-box-label">Report details</span>
-              <p className="verify-bio-text">{selected.details}</p>
+              <p className="verify-bio-text">{selected.details || 'No additional details provided'}</p>
             </div>
 
-            <div className="report-actions">
-              {REPORT_ACTIONS.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  className={`btn btn-${action.tone}`}
-                  onClick={() => handleAction(selected, action)}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
+            {!pendingAction ? (
+              <div className="report-actions">
+                {REPORT_ACTIONS.map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className={`btn btn-${action.tone}`}
+                    onClick={() => handleActionClick(selected, action)}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="verify-bio" style={{ marginTop: 16, background: '#f8fafc', borderColor: 'var(--primary)' }}>
+                <h4 style={{ margin: '0 0 10px', textTransform: 'capitalize' }}>Confirm Action: {pendingAction.label}</h4>
+                {pendingAction.key === 'suspend' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label htmlFor="report-suspend-days" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>Suspension Duration</label>
+                    <select
+                      id="report-suspend-days"
+                      value={durationDays}
+                      onChange={(e) => setDurationDays(e.target.value)}
+                      style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', width: '100%' }}
+                    >
+                      <option value="1">1 Day</option>
+                      <option value="3">3 Days</option>
+                      <option value="7">7 Days</option>
+                      <option value="14">14 Days</option>
+                      <option value="30">30 Days</option>
+                    </select>
+                  </div>
+                )}
+                <div style={{ marginBottom: 12 }}>
+                  <label htmlFor="report-mod-reason" style={{ display: 'block', fontWeight: 600, fontSize: '0.82rem', marginBottom: 4 }}>Reason for {pendingAction.label} *</label>
+                  <textarea
+                    id="report-mod-reason"
+                    rows={3}
+                    value={actionReason}
+                    onChange={(e) => setActionReason(e.target.value)}
+                    placeholder="Enter reason..."
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontFamily: 'inherit' }}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setPendingAction(null)}>
+                    Cancel
+                  </button>
+                  <button type="button" className={`btn btn-${pendingAction.tone} btn-sm`} onClick={handleConfirmAction}>
+                    Confirm {pendingAction.label}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}

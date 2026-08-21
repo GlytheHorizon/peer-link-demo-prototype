@@ -35,7 +35,8 @@ async function updateProfile(userId, fields) {
   const allowed = [
     'course', 'max_year_level', 'bio', 'availability', 'tags', 'age', 'grade_level', 'school', 'strand',
     'contact_no', 'gender',
-    'subjects_teach', 'learning_mode', 'preferred_schedule', 'preferred_time'
+    'subjects_teach', 'learning_mode', 'preferred_schedule', 'preferred_time',
+    'verification_status'
   ];
   const sets = [];
   const params = [];
@@ -46,8 +47,8 @@ async function updateProfile(userId, fields) {
     }
   }
   if (!sets.length) return;
-  params.push(userId);
-  await query(`UPDATE tutor_profiles SET ${sets.join(', ')} WHERE user_id = ?`, params);
+  params.push(userId, userId);
+  await query(`UPDATE tutor_profiles SET ${sets.join(', ')} WHERE user_id = ? OR id = ?`, params);
 }
 
 async function getProfileWithSubjects(userId) {
@@ -78,8 +79,9 @@ async function findProfileById(id) {
 async function getPublicTutor(id) {
   // Accepts EITHER a tutor_profile id (matching results / dashboard links) OR a
   // user id (messages / sessions / profile links) for the same tutor.
-  const profile = await findProfileById(id)
-    || await findProfileByUserId(id);
+  // Try user_id first since match/browse results pass tutor_user_id (user_id).
+  const profile = await findProfileByUserId(id)
+    || await findProfileById(id);
   if (!profile) return null;
   const subjects = await query(
     `SELECT s.id, s.code, s.name, s.description, ts.proficiency, ts.rate_per_hour
@@ -156,7 +158,7 @@ async function getAllTutors() {
             tp.availability, tp.tags, tp.learning_mode, u.first_name, u.last_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
-     WHERE u.is_active = TRUE`
+     WHERE u.is_active = TRUE AND tp.verification_status = 'approved'`
   );
 }
 

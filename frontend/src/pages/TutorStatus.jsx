@@ -51,10 +51,10 @@ export default function TutorStatus() {
         <div className="status-icon">
           <ClockIcon />
         </div>
-        <h1 className="status-title">Waiting for Approval</h1>
+        <h1 className="status-title">Account Created — Waiting for Approval</h1>
         <p className="status-text">
-          Our team is reviewing your credentials and documents. This usually takes 24–48 hours.
-          We'll notify you once you've verified.
+          Your tutor account has been created. You can now <Link to="/login" className="inline-link">log in</Link> with your email and password.
+          Dashboard access will be enabled once our team reviews your credentials (24–48 hours).
         </p>
         <span className="status-badge">Under Review</span>
       </div>
@@ -86,12 +86,12 @@ export default function TutorStatus() {
           <ClockIcon />
           <div>
             <strong>Estimated approval: {estimated}</strong>
-            <span className="muted">You'll receive an email notification.</span>
+            <span className="muted">You'll receive an email notification when approved.</span>
           </div>
         </div>
 
         <div className="status-footer">
-          <Link className="btn btn-outline" to="/login">Back to Login</Link>
+          <Link className="btn btn-primary" to="/login">Go to Login</Link>
         </div>
       </div>
     </div>

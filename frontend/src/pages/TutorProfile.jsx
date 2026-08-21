@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { tutorService, conversationService } from '../services';
 import { Spinner, Alert, RatingStars, formatDate, EmptyState } from '../components/ui';
+import ReportModal from '../components/ReportModal';
 
 const initialsOf = (name) => (
   (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -21,6 +23,7 @@ export default function TutorProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const [tutor, setTutor] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +31,7 @@ export default function TutorProfile() {
   const [subjectId, setSubjectId] = useState(params.get('subject') || '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   useEffect(() => {
     tutorService.getPublic(id).then((res) => {
@@ -81,6 +85,9 @@ export default function TutorProfile() {
           <button className="btn btn-primary" onClick={startConversation} disabled={busy}>
             {busy ? 'Starting…' : '✉ Chat'}
           </button>
+          <button className="btn btn-outline" onClick={() => setShowReportModal(true)} title="Report user">
+            ⚠ Report
+          </button>
         </div>
       </div>
 
@@ -119,7 +126,12 @@ export default function TutorProfile() {
       <div className="card profile-panel">
         <h4>Book a session</h4>
         <div className="book-row">
-          <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} aria-label="Subject for the session">
+          <select
+            className="subject-select"
+            value={subjectId}
+            onChange={(e) => setSubjectId(e.target.value)}
+            aria-label="Subject for the session"
+          >
             <option value="">Select subject…</option>
             {tutor.subjects.map((s) => (
               <option key={s.id} value={s.id}>
@@ -127,11 +139,19 @@ export default function TutorProfile() {
               </option>
             ))}
           </select>
-          <button className="btn btn-outline" onClick={bookSession} disabled={busy}>
+          <button className="btn btn-primary" onClick={bookSession} disabled={busy}>
             Book session
           </button>
         </div>
       </div>
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportedUserId={tutor.user_id}
+        reportedUserName={tutor.full_name}
+        reporterRole={user.role_key}
+      />
     </div>
   );
 }

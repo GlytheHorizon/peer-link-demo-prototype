@@ -1,6 +1,7 @@
-const { asyncHandler, ok } = require('../utils/http');
+const { asyncHandler, ok, ApiError } = require('../utils/http');
 const { query } = require('../config/db');
 const log = require('../services/activityLogService').log;
+const userModel = require('../models/userModel');
 
 /** GET /api/reports/overview — headline metrics. Faculty + admin. */
 const overview = asyncHandler(async (req, res) => {
@@ -90,4 +91,120 @@ const studentsReport = asyncHandler(async (req, res) => {
   ok(res, 200, rows);
 });
 
-module.exports = { overview, sessionsReport, tutorsReport, studentsReport };
+/** POST /api/reports/user — student/tutor submits a report on another user. */
+const createUserReport = asyncHandler(async (req, res) => {
+  const { reported_id, reason, session_id, details } = req.body;
+  const reporter_id = req.user.id;
+
+  if (!reported_id || !reason) {
+    return res.status(400).json({ message: 'Reported user and reason are required' });
+  }
+
+  if (reporter_id === Number(reported_id)) {
+    return res.status(400).json({ message: 'You cannot report yourself' });
+  }
+
+  const reportedUsers = await query('SELECT id FROM users WHERE id = ?', [reported_id]);
+  if (!reportedUsers.length) {
+    return res.status(404).json({ message: 'Reported user not found' });
+  }
+
+  let sessionId = null;
+  if (session_id) {
+    const sessions = await query('SELECT id FROM sessions WHERE id = ?', [session_id]);
+    if (!sessions.length) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
+    sessionId = session_id;
+  }
+
+  const result = await query(
+    `INSERT INTO user_reports (reporter_id, reported_id, reason, session_id, details)
+     VALUES (?, ?, ?, ?, ?)`,
+    [reporter_id, reported_id, reason, sessionId, details || null]
+  );
+
+  const reportId = result.insertId;
+  log(req, 'report.create_user', 'user_report', reportId, { report_id: reportId });
+  ok(res, 201, { id: reportId, reporter_id, reported_id, reason, session_id: sessionId, details });
+});
+
+/** GET /api/reports/user — admin lists all user reports. */
+const listUserReports = asyncHandler(async (req, res) => {
+  const { status } = req.query;
+  let where = '';
+  const params = [];
+  if (status) {
+    where = 'WHERE ur.status = ?';
+    params.push(status);
+  }
+
+  const reports = await query(
+    `SELECT ur.*, 
+            CONCAT(r.first_name, ' ', r.last_name) AS reporter_name,
+            r.role AS reporter_role,
+            CONCAT(rep.first_name, ' ', rep.last_name) AS reported_name,
+            rep.role AS reported_role,
+            s.topic AS session_topic,
+            s.scheduled_start AS session_start
+     FROM user_reports ur
+     JOIN users r ON r.id = ur.reporter_id
+     JOIN users rep ON rep.id = ur.reported_id
+     LEFT JOIN sessions s ON s.id = ur.session_id
+     ${where}
+     ORDER BY ur.created_at DESC`,
+    params
+  );
+
+  log(req, 'report.list_user', 'user_report');
+  ok(res, 200, reports);
+});
+
+/** PATCH /api/reports/user/:id — admin resolves a user report. */
+const resolveUserReport = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { action, reason, duration_days, end_date } = req.body;
+
+  const validActions = ['dismiss', 'warn', 'suspend', 'ban'];
+  if (!action || !validActions.includes(action)) {
+    return res.status(400).json({ message: 'Invalid action' });
+  }
+
+  const rows = await query('SELECT * FROM user_reports WHERE id = ?', [id]);
+  if (!rows.length) {
+    return res.status(404).json({ message: 'Report not found' });
+  }
+  const report = rows[0];
+
+  if (report.status === 'resolved') {
+    return res.status(400).json({ message: 'Report already resolved' });
+  }
+
+  const actionReason = (reason && reason.trim()) ? reason.trim() : `Report resolution: ${report.reason}`;
+
+  if (action === 'warn') {
+    await userModel.warnUser({ userId: report.reported_id, adminId: req.user.id, reason: actionReason });
+  } else if (action === 'suspend') {
+    let suspendedUntil;
+    if (end_date) {
+      suspendedUntil = new Date(end_date);
+    } else if (duration_days) {
+      suspendedUntil = new Date(Date.now() + Number(duration_days) * 24 * 60 * 60 * 1000);
+    } else {
+      suspendedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // Default 7 days if unspecified
+    }
+    await userModel.suspendUser({ userId: report.reported_id, suspendedUntil, reason: actionReason });
+  } else if (action === 'ban') {
+    await userModel.banUser({ userId: report.reported_id, reason: actionReason });
+  }
+
+  await query(
+    `UPDATE user_reports SET status = 'resolved', action_taken = ?, resolved_at = now() WHERE id = ?`,
+    [action, id]
+  );
+
+  log(req, 'report.resolve_user', 'user_report', id, { report_id: id, action, reason: actionReason });
+  ok(res, 200, { message: `Report resolved — ${action}` });
+});
+
+module.exports = { overview, sessionsReport, tutorsReport, studentsReport, createUserReport, listUserReports, resolveUserReport };

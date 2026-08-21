@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import ProtectedRoute, { GuestRoute } from './routes/ProtectedRoute';
+import ProtectedRoute, { GuestRoute, ApprovedTutorRoute } from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 
 import Landing from './pages/Landing';
@@ -9,6 +9,8 @@ import AdminLogin from './pages/AdminLogin';
 import Register from './pages/Register';
 import TutorRegister from './pages/TutorRegister';
 import TutorStatus from './pages/TutorStatus';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import RoleDashboard from './pages/RoleDashboard';
 import Profile from './pages/Profile';
 import Subjects from './pages/Subjects';
@@ -40,11 +42,30 @@ const shell = (roles, page) => (
   </ProtectedRoute>
 );
 
+const tutorShell = (page) => (
+  <ProtectedRoute roles={['tutor']}>
+    <ApprovedTutorRoute>
+      <DashboardLayout>{page}</DashboardLayout>
+    </ApprovedTutorRoute>
+  </ProtectedRoute>
+);
+
+/** Shared student/tutor routes: students always allowed, tutors need approval. */
+const studentTutorShell = (page) => (
+  <ProtectedRoute roles={['student', 'tutor']}>
+    <ApprovedTutorRoute>
+      <DashboardLayout>{page}</DashboardLayout>
+    </ApprovedTutorRoute>
+  </ProtectedRoute>
+);
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+      <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+      <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
       <Route path="/admin/login" element={<GuestRoute><AdminLogin /></GuestRoute>} />
       <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
       <Route path="/register/tutor" element={<GuestRoute><TutorRegister /></GuestRoute>} />
@@ -60,12 +81,12 @@ export default function App() {
       <Route path="/tutors/:id/reviews" element={shell(null, <Reviews />)} />
       <Route path="/students/:id" element={shell(['student', 'tutor'], <StudentProfile />)} />
 
-      <Route path="/messages" element={shell(['student', 'tutor'], <Messages />)} />
-      <Route path="/messages/:id" element={shell(['student', 'tutor'], <Messages />)} />
+      <Route path="/messages" element={studentTutorShell(<Messages />)} />
+      <Route path="/messages/:id" element={studentTutorShell(<Messages />)} />
 
-      <Route path="/sessions" element={shell(['student', 'tutor'], <Sessions />)} />
+      <Route path="/sessions" element={studentTutorShell(<Sessions />)} />
       <Route path="/sessions/new" element={shell(['student'], <ScheduleSession />)} />
-      <Route path="/sessions/:id" element={shell(['student', 'tutor'], <SessionDetails />)} />
+      <Route path="/sessions/:id" element={studentTutorShell(<SessionDetails />)} />
 
       <Route path="/reports" element={shell(['faculty', 'admin'], <Reports />)} />
       <Route path="/admin/verifications" element={shell(['admin'], <TutorVerifications />)} />
@@ -75,11 +96,11 @@ export default function App() {
       <Route path="/admin/logs" element={shell(['admin'], <ActivityLogs />)} />
 
       <Route path="/resources" element={shell(null, <Resources />)} />
-      <Route path="/calendar" element={shell(['student', 'tutor'], <Calendar />)} />
+      <Route path="/calendar" element={studentTutorShell(<Calendar />)} />
       <Route path="/payment" element={shell(['student'], <Payment />)} />
 
-      <Route path="/students" element={shell(['tutor'], <MyStudents />)} />
-      <Route path="/earnings" element={shell(['tutor'], <Earnings />)} />
+      <Route path="/students" element={tutorShell(<MyStudents />)} />
+      <Route path="/earnings" element={tutorShell(<Earnings />)} />
       <Route path="/verification" element={shell(['tutor'], <Verification />)} />
 
       <Route path="*" element={<Landing />} />

@@ -38,6 +38,7 @@ const FILTERS = [
 
 const STATUS_PILL = {
   'Waiting for payment': 'pill--accepted',
+  Ongoing: 'pill--neutral',
   Pending: 'pill--pending',
   Completed: 'pill--neutral',
   Cancelled: 'pill--cancelled'
@@ -45,7 +46,8 @@ const STATUS_PILL = {
 
 /** Status of a subject for a student, from their real session history. */
 const subjectStatus = (list) => {
-  if (list.some((x) => x.status === 'accepted' && asDate(x.scheduled_start) > new Date())) return 'Waiting for payment';
+  if (list.some((x) => x.status === 'accepted' && x.payment_id && asDate(x.scheduled_start) > new Date())) return 'Ongoing';
+  if (list.some((x) => x.status === 'accepted' && !x.payment_id && asDate(x.scheduled_start) > new Date())) return 'Waiting for payment';
   if (list.some((x) => x.status === 'pending')) return 'Pending';
   const latest = [...list].sort((a, b) => asDate(a.scheduled_start) - asDate(b.scheduled_start)).pop();
   if (!latest) return 'Completed';
@@ -55,7 +57,7 @@ const subjectStatus = (list) => {
 export default function MyStudents() {
   const navigate = useNavigate();
   const confirm = useConfirm();
-  const sessions = useApi(sessionService.list, [], 15000);
+  const sessions = useApi(sessionService.list, [], 5000);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [notice, setNotice] = useState(null);
@@ -89,7 +91,7 @@ export default function MyStudents() {
       return {
         ...st,
         subjects,
-        active: subjects.some((s) => s.status === 'Waiting for payment' || s.status === 'Pending'),
+        active: subjects.some((s) => s.status === 'Waiting for payment' || s.status === 'Pending' || s.status === 'Confirmed'),
         subjectId: latest?.subject_id || null,
         latestAt: latest ? asDate(latest.scheduled_start) : 0
       };
@@ -132,6 +134,9 @@ export default function MyStudents() {
     <div>
       <div className="page-head">
         <h2>My Students</h2>
+        <button className="btn btn-ghost btn-sm" onClick={() => sessions.reload()} disabled={sessions.loading} title="Refresh">
+          ⟳ Refresh
+        </button>
       </div>
       {sessions.loading && <Spinner />}
       {sessions.error && <Alert type="error">{sessions.error.message}</Alert>}

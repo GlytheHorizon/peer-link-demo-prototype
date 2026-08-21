@@ -133,4 +133,62 @@ const stats = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { listUsers, createUser, updateUser, deleteUser, listSubjects, listSessions, stats };
+/** POST /api/admin/users/:id/warn — issue warning to user (admin only). */
+const warnUser = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const { reason } = req.body;
+  validate({ reason: [v.required('reason')] }, req.body);
+
+  const user = await userModel.findById(id);
+  if (!user) throw new ApiError(404, 'User not found');
+  if (id === req.user.id) throw new ApiError(400, 'You cannot warn yourself');
+
+  const warningId = await userModel.warnUser({ userId: id, adminId: req.user.id, reason: reason.trim() });
+  log(req, 'admin.user_warn', 'user', id, { reason });
+  ok(res, 201, { id: warningId, user_id: id, reason: reason.trim() }, 'Warning issued successfully');
+});
+
+/** POST /api/admin/users/:id/suspend — suspend user account (admin only). */
+const suspendUser = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const { reason, duration_days, end_date } = req.body;
+  validate({ reason: [v.required('reason')] }, req.body);
+
+  const user = await userModel.findById(id);
+  if (!user) throw new ApiError(404, 'User not found');
+  if (id === req.user.id) throw new ApiError(400, 'You cannot suspend your own account');
+
+  let suspendedUntil;
+  if (end_date) {
+    suspendedUntil = new Date(end_date);
+  } else if (duration_days) {
+    suspendedUntil = new Date(Date.now() + Number(duration_days) * 24 * 60 * 60 * 1000);
+  } else {
+    throw new ApiError(400, 'A suspension duration or end date is required');
+  }
+
+  if (isNaN(suspendedUntil.getTime()) || suspendedUntil <= new Date()) {
+    throw new ApiError(400, 'Suspension end date must be a valid future date');
+  }
+
+  await userModel.suspendUser({ userId: id, suspendedUntil, reason: reason.trim() });
+  log(req, 'admin.user_suspend', 'user', id, { reason, suspendedUntil });
+  ok(res, 200, await userModel.findById(id), 'User account suspended');
+});
+
+/** POST /api/admin/users/:id/ban — permanently ban user account (admin only). */
+const banUser = asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const { reason } = req.body;
+  validate({ reason: [v.required('reason')] }, req.body);
+
+  const user = await userModel.findById(id);
+  if (!user) throw new ApiError(404, 'User not found');
+  if (id === req.user.id) throw new ApiError(400, 'You cannot ban your own account');
+
+  await userModel.banUser({ userId: id, reason: reason.trim() });
+  log(req, 'admin.user_ban', 'user', id, { reason });
+  ok(res, 200, await userModel.findById(id), 'User account banned permanently');
+});
+
+module.exports = { listUsers, createUser, updateUser, deleteUser, listSubjects, listSessions, stats, warnUser, suspendUser, banUser };

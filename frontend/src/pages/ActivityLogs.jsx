@@ -41,7 +41,8 @@ export default function ActivityLogs() {
       {loading && !data && <Spinner />}
 
       <div className="card">
-        <table className="table">
+        <div className="table-wrap table-responsive">
+          <table className="table">
           <thead>
             <tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>IP</th><th>Details</th></tr>
           </thead>
@@ -58,7 +59,8 @@ export default function ActivityLogs() {
             ))}
           </tbody>
         </table>
-        {data && (
+          </div>
+          {data && (
           <div className="pager">
             <span className="muted small">Page {data.page} · {data.total} logs</span>
             <div>

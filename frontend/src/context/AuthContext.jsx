@@ -58,6 +58,22 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!getToken()) return;
+    const res = await authService.me();
+    if (res.ok) {
+      setUser(res.data);
+    } else {
+      console.error('[AuthContext] refreshUser failed:', res.status, res.message);
+      // Don't clear token on 401 - might be a transient issue; let user manually re-login if needed
+      if (res.status !== 401) setToken(null);
+    }
+  }, []);
+
+  const updateVerificationStatus = useCallback((status) => {
+    setUser(prev => prev ? { ...prev, verification_status: status } : null);
+  }, []);
+
   const isRole = useCallback(
     (...roles) => Boolean(user && roles.includes(user.role_key)),
     [user]
@@ -70,6 +86,8 @@ export function AuthProvider({ children }) {
     adminLogin,
     register,
     logout,
+    refreshUser,
+    updateVerificationStatus,
     isRole,
     roleLabel: user ? ROLE_LABELS[user.role_key] : ''
   };

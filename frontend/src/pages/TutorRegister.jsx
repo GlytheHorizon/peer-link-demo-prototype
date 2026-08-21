@@ -10,6 +10,24 @@ const STEPS = [
   { n: 3, label: 'Review & Submit' }
 ];
 
+function EyeIcon({ open }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {open ? (
+        <>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      ) : (
+        <>
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function UploadIcon() {
   return (
     <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -97,6 +115,7 @@ export default function TutorRegister() {
     fullName: '',
     email: '',
     password: '',
+    confirmPassword: '',
     address: '',
     phone: '',
     hourlyRate: '',
@@ -112,6 +131,8 @@ export default function TutorRegister() {
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [applicationId, setApplicationId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -129,6 +150,7 @@ export default function TutorRegister() {
     if (!form.fullName.trim()) return 'Please enter your full name';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Please enter a valid email address';
     if (form.password.length < 8) return 'Password must be at least 8 characters';
+    if (form.password !== form.confirmPassword) return 'Passwords do not match';
     if (!form.phone.trim()) return 'Please enter your phone number';
     if (!form.hourlyRate || Number(form.hourlyRate) <= 0) return 'Please enter a valid hourly rate';
     return null;
@@ -169,6 +191,7 @@ export default function TutorRegister() {
     const res = await authService.applyTutor({
       full_name: form.fullName.trim(),
       email: form.email.trim(),
+      password: form.password,
       phone: form.phone.trim(),
       address: form.address.trim(),
       hourly_rate: Number(form.hourlyRate),
@@ -268,15 +291,51 @@ export default function TutorRegister() {
               </div>
               <div>
                 <label htmlFor="tutor-password">Password</label>
-                <input
-                  id="tutor-password"
-                  type="password"
-                  value={form.password}
-                  onChange={set('password')}
-                  placeholder="Min. 8 characters"
-                  autoComplete="new-password"
-                  required
-                />
+                <div className="password-wrapper">
+                  <input
+                    id="tutor-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={set('password')}
+                    placeholder="Min. 8 characters"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                  >
+                    <EyeIcon open={showPassword} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="tutor-grid-2">
+              <div>
+                <label htmlFor="tutor-confirm-password">Confirm Password</label>
+                <div className="password-wrapper">
+                  <input
+                    id="tutor-confirm-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={form.confirmPassword}
+                    onChange={set('confirmPassword')}
+                    placeholder="Confirm password"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showConfirmPassword}
+                  >
+                    <EyeIcon open={showConfirmPassword} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -495,10 +554,10 @@ export default function TutorRegister() {
                     <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
-                <h2 className="confirm-title">Application Submitted</h2>
+                <h2 className="confirm-title">Account Created</h2>
                 <p className="confirm-text">
-                  Your credentials have been sent for review. Our team will verify your information
-                  within 24–48 hours.
+                  Your tutor account has been created. You can now log in with your email and password.
+                  Dashboard access will be enabled once our team reviews your application (24–48 hours).
                 </p>
                 <Link
                   className="status-pill"
@@ -506,7 +565,7 @@ export default function TutorRegister() {
                   state={applicationState}
                 >
                   <span className="status-dot" />
-                  Setting up your status page...
+                  View Application Status
                 </Link>
               </div>
             )}
