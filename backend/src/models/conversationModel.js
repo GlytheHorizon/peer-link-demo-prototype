@@ -16,7 +16,7 @@ async function findOrCreate({ studentId, tutorId, subjectId }) {
 
 async function findById(id) {
   const rows = await query(
-    `SELECT c.*, s.code AS subject_code, s.name AS subject_name,
+    `SELECT c.*, c.deleted_by, s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
             CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
             st.last_seen_at AS student_last_seen_at,

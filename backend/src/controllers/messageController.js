@@ -22,6 +22,13 @@ const sendMessage = asyncHandler(async (req, res) => {
   if (!(await conversationModel.isParticipant(conversationId, req.user.id))) {
     throw new ApiError(403, 'You are not part of this conversation');
   }
+  const conversation = await conversationModel.findById(conversationId);
+  const otherUserId = conversation.student_id === req.user.id ? conversation.tutor_id : conversation.student_id;
+  console.log('[sendMessage] conversation:', { id: conversationId, deleted_by: conversation.deleted_by, student_id: conversation.student_id, tutor_id: conversation.tutor_id, sender: req.user.id, otherUserId });
+  if (conversation.deleted_by === otherUserId) {
+    console.log('[sendMessage] Restoring conversation for user:', otherUserId);
+    await conversationModel.restoreForUser(conversationId, otherUserId);
+  }
   const messageId = await messageModel.create({ conversationId, senderId: req.user.id, body: body.trim() });
   const messages = await messageModel.listByConversation(conversationId);
   const created = messages.find((m) => m.id === messageId);

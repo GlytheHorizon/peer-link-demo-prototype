@@ -20,7 +20,7 @@
 - **Student Profiles** — subjects needed, course, year level, strand, learning preferences
 - **Tutor Profiles** — subjects taught with proficiency ratings (1–5), weekly availability, bio
 - **Automated Matching Engine** — 0–100 compatibility score per subject:
-  `subject 40% · proficiency 20% · course/year 15% · availability 15% · rating 10%`
+  `subject 35% · proficiency 25% · price/rate 15% · course/year 15% · availability 5% · rating 5%`
 - **Messaging** — real-time-style conversation threads, unread counts, unsend
 - **Session Workflow** — request → accept/reject → complete → evaluate; conflict prevention
 - **Evaluations** — one per completed session; feed the tutor's rating in the matching engine
@@ -116,7 +116,7 @@ const interval = setInterval(fetchWarnings, 5000); // Change 5000 to any ms valu
 In `backend/src/services/matchingService.js` — the `WEIGHTS` object:
 ```js
 const WEIGHTS = {
-  subject: 40, proficiency: 20, courseYear: 15, availability: 15, rating: 10
+  subject: 35, proficiency: 25, rate: 15, courseYear: 15, availability: 5, rating: 5
 };
 ```
 
@@ -132,12 +132,13 @@ Re-run `database/schema.sql` or `database/reset.sql` in phpMyAdmin (SQL tab) aft
 peerlink/
 ├── .env.example              Environment variable template
 ├── .gitignore                Ignores: node_modules/, dist/, .env, *.log
-├── vercel.json               Vercel Services config (frontend + backend on shared domain)
 ├── README.md                 This file
 │
 ├── database/
-│   ├── schema.sql            Full MySQL schema (21 tables) + demo seed data
-│   └── reschema.sql          Incremental migration patches (run after schema.sql)
+│   ├── schema.sql            Full MySQL schema (core tables) + base demo seed data
+│   ├── reschema.sql          Incremental migration patches (run after schema.sql)
+│   ├── reset.sql             Wipes all rows + reseeds the full demo dataset
+│   └── password_reset_tokens.sql  Password reset token table (forgot/reset flow)
 │
 ├── backend/                  Node.js + Express REST API
 │   ├── .env                  Local secrets — never committed
@@ -291,14 +292,17 @@ peerlink/
             ├── Earnings.jsx          Tutor earnings tracker
             ├── MyStudents.jsx        Tutor's student list
             ├── Reviews.jsx           Tutor reviews page
-            └── Payment.jsx           Payment page
+            ├── Payment.jsx
+            ├── Verification.jsx      Tutor verification status / document upload
+            ├── TutorStatus.jsx       Tutor account status view
+            └── ComingSoon.jsx        Placeholder page for unbuilt features           Payment page
 ```
 
 ---
 
 ## 🗄 Database Schema
 
-21 tables in MySQL (phpMyAdmin ready):
+Tables in MySQL (phpMyAdmin ready):
 
 | Table | Purpose |
 |---|---|
@@ -317,6 +321,13 @@ peerlink/
 | `user_warnings` | Admin-issued warnings with acknowledgment tracking |
 | `activity_logs` | Full admin audit trail |
 | `tab_updates` | Badge tracking for sidebar notifications |
+| `password_reset_tokens` | Password reset tokens (forgot/reset flow) |
+| `conversation_payments` | Per-conversation payment records |
+| `payments` | Session payments |
+| `reschedule_requests` | Reschedule proposals for a session |
+| `subject_requests` | Tutor requests to add/teach subjects |
+| `tutor_applications` | Tutor verification / credential applications |
+| `resources` | Shared resource library entries |
 
 ---
 
@@ -362,35 +373,7 @@ npm run dev
 :: Runs on http://localhost:5173 (proxies /api → :5000)
 ```
 
----
 
-## ☁️ Deploy to Vercel
-
-The repo includes a `vercel.json` defining two services on one shared domain:
-
-- **`frontend`** — Vite SPA
-- **`backend`** — Express API (entrypoint: `src/app.js`)
-
-All `/api/*` requests rewrite to the backend; everything else serves the SPA.
-
-**Steps:**
-
-1. Import this repo into [Vercel](https://vercel.com)
-2. In **Project Settings → Build & Deployment**, set **Framework Preset** to **Services**
-3. Add these environment variables in Vercel:
-
-   | Variable | Value |
-   |---|---|
-   | `DB_HOST` | MySQL host / address |
-   | `DB_USER` | MySQL username |
-   | `DB_PASSWORD` | MySQL password |
-   | `DB_NAME` | `peerlink` |
-   | `JWT_SECRET` | A long random secret |
-   | `CLIENT_URL` | `https://your-app.vercel.app` |
-
-4. Deploy. The Express app runs as a Vercel Function with Fluid compute.
-
----
 
 ## 👤 Demo Accounts
 
@@ -400,8 +383,6 @@ All `/api/*` requests rewrite to the backend; everything else serves the SPA.
 | Tutor | `tutor@peerlink.edu` | `Tutor@123` | Sessions, students, earnings, verification, messages |
 | Faculty | `faculty@peerlink.edu` | `Faculty@123` | Academic reports (overview, sessions, tutors, students) |
 | Admin | `admin@peerlink.edu` | `Admin@123` | Full platform management + moderation |
-
-Additional seeded accounts: `david.garcia@peerlink.edu`, `sara.kim@peerlink.edu` (tutors), `mike.chen@peerlink.edu` (student) — same password pattern.
 
 ---
 
@@ -432,7 +413,7 @@ All responses use: `{ success: bool, message: string, data: any }`
 ## ⚙️ Matching Algorithm
 
 ```
-Score = subject(40) + proficiency(20) + course/year(15) + availability(15) + rating(10)
+Score = subject(35) + proficiency(25) + rate(15) + course/year(15) + availability(5) + rating(5)
 ```
 
 Computed per student+subject pair against every available tutor. Results are stored in the `matches` table and returned sorted highest-first with a score breakdown for transparency.
