@@ -3,6 +3,16 @@ const { query } = require('../config/db');
 const COLUMNS =
   'id, full_name, email, phone, address, hourly_rate, subjects, license_number, institution, specialization, years_teaching, license_file, id_file, status, created_at, reviewed_at';
 
+function parseJsonField(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 async function create(data) {
   const result = await query(
     `INSERT INTO tutor_applications
@@ -28,7 +38,10 @@ async function create(data) {
 
 async function findById(id) {
   const rows = await query(`SELECT ${COLUMNS} FROM tutor_applications WHERE id = ?`, [id]);
-  return rows[0] || null;
+  if (!rows[0]) return null;
+  const app = rows[0];
+  app.subjects = parseJsonField(app.subjects);
+  return app;
 }
 
 async function findByEmail(email) {
@@ -36,7 +49,10 @@ async function findByEmail(email) {
     `SELECT ${COLUMNS} FROM tutor_applications WHERE email = ? ORDER BY created_at DESC LIMIT 1`,
     [email]
   );
-  return rows[0] || null;
+  if (!rows[0]) return null;
+  const app = rows[0];
+  app.subjects = parseJsonField(app.subjects);
+  return app;
 }
 
 async function list({ status, page = 1, limit = 50 } = {}) {
@@ -53,6 +69,9 @@ async function list({ status, page = 1, limit = 50 } = {}) {
     [...params, limit, offset]
   );
   const count = await query(`SELECT COUNT(*) AS total FROM tutor_applications ${whereSql}`, params);
+  for (const app of rows) {
+    app.subjects = parseJsonField(app.subjects);
+  }
   return { rows, total: count[0].total, page, limit };
 }
 

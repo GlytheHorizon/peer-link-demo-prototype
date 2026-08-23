@@ -1,5 +1,25 @@
 const { query, qex } = require('../config/db');
 
+function parseJsonField(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseProfileJsonFields(profile) {
+  if (!profile) return profile;
+  profile.availability = parseJsonField(profile.availability);
+  profile.tags = parseJsonField(profile.tags);
+  profile.subjects_teach = parseJsonField(profile.subjects_teach);
+  profile.preferred_schedule = parseJsonField(profile.preferred_schedule);
+  return profile;
+}
+
 async function findProfileByUserId(userId) {
   const rows = await query(
     `SELECT tp.*, CONCAT(u.first_name, ' ', u.last_name) AS full_name, u.email
@@ -8,7 +28,7 @@ async function findProfileByUserId(userId) {
      WHERE tp.user_id = ? AND u.is_active = TRUE`,
     [userId]
   );
-  return rows[0] || null;
+  return parseProfileJsonFields(rows[0] || null);
 }
 
 async function createProfile({ userId, course, max_year_level, bio, availability, tags, age, grade_level, school, strand, contact_no, gender, subjects_teach, learning_mode, preferred_schedule, preferred_time }, conn) {
@@ -73,7 +93,7 @@ async function findProfileById(id) {
      WHERE tp.id = ? AND u.is_active = TRUE`,
     [id]
   );
-  return rows[0] || null;
+  return parseProfileJsonFields(rows[0] || null);
 }
 
 async function getPublicTutor(id) {
@@ -153,13 +173,14 @@ async function ensureProfile(userId, data, conn) {
 
 /** All active tutors with courses/subjects — used by the matching service. */
 async function getAllTutors() {
-  return query(
+  const tutors = await query(
     `SELECT tp.id AS tutor_profile_id, tp.user_id, tp.course, tp.max_year_level,
             tp.availability, tp.tags, tp.learning_mode, u.first_name, u.last_name, u.email
      FROM tutor_profiles tp
      JOIN users u ON u.id = tp.user_id
      WHERE u.is_active = TRUE AND tp.verification_status = 'approved'`
   );
+  return tutors.map(parseProfileJsonFields);
 }
 
 /** All active tutors with their teaching subjects — used for browsing resource folders. */

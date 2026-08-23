@@ -1,5 +1,23 @@
 const { query, qex, withTransaction } = require('../config/db');
 
+function parseJsonField(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseStudentProfileJsonFields(profile) {
+  if (!profile) return profile;
+  profile.subjects_needed = parseJsonField(profile.subjects_needed);
+  profile.preferred_schedule = parseJsonField(profile.preferred_schedule);
+  return profile;
+}
+
 async function findProfileByUserId(userId) {
   const rows = await query(
     `SELECT sp.*, CONCAT(u.first_name, ' ', u.last_name) AS full_name, u.email
@@ -8,7 +26,7 @@ async function findProfileByUserId(userId) {
      WHERE sp.user_id = ?`,
     [userId]
   );
-  return rows[0] || null;
+  return parseStudentProfileJsonFields(rows[0] || null);
 }
 
 async function createProfile({ userId, year_level, course, bio, age, grade_level, school, strand, contact_no, gender, subjects_needed, learning_mode, preferred_schedule, preferred_time }, conn) {
