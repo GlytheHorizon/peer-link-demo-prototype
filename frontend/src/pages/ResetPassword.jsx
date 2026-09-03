@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GuestRoute } from '../routes/ProtectedRoute';
-import { Alert, Spinner } from '../components/ui';
+import { Alert, Spinner, Modal } from '../components/ui';
 import { authService } from '../services';
+import { isStaticDemo } from '../demo/staticMode';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
   const [validating, setValidating] = useState(true);
+  const [showVisualOnly, setShowVisualOnly] = useState(false);
   const navigate = useNavigate();
 
   const setField = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -42,6 +44,7 @@ export default function ResetPassword() {
     setBusy(false);
     if (res.ok) {
       setSuccess(true);
+      if (isStaticDemo()) setShowVisualOnly(true);
     } else {
       setError(res.message);
     }
@@ -118,6 +121,18 @@ export default function ResetPassword() {
           </>
         )}
       </div>
+
+      {showVisualOnly && (
+        <Modal title="Static demo — visual only" onClose={() => setShowVisualOnly(false)}>
+          <p>
+            This is only for <strong>visual representation</strong>. No password was
+            really changed — the static demo has no backend or database.
+          </p>
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setShowVisualOnly(false)}>
+            Got it
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }

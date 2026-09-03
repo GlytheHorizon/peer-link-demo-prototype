@@ -1,20 +1,28 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GuestRoute } from '../routes/ProtectedRoute';
-import { Alert } from '../components/ui';
+import { Alert, Modal } from '../components/ui';
 import { authService } from '../services';
+import { isStaticDemo } from '../demo/staticMode';
 
 export default function ForgotPassword() {
   const [form, setForm] = useState({ email: '' });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showVisualOnly, setShowVisualOnly] = useState(false);
   const navigate = useNavigate();
 
   const setField = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async (e) => {
     e.preventDefault();
+    // Static demo: visual representation only — no email is ever sent.
+    if (isStaticDemo()) {
+      setSuccess(true);
+      setShowVisualOnly(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     const res = await authService.requestPasswordReset(form.email.trim().toLowerCase());
@@ -65,6 +73,19 @@ export default function ForgotPassword() {
           <Link to="/login">← Back to Login</Link>
         </p>
       </div>
+
+      {showVisualOnly && (
+        <Modal title="Static demo — visual only" onClose={() => setShowVisualOnly(false)}>
+          <p>
+            This is only for <strong>visual representation</strong>. No password-reset
+            email was sent and nothing was changed — the static demo has no
+            backend, database, or email service.
+          </p>
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setShowVisualOnly(false)}>
+            Got it
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }

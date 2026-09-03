@@ -4507,3 +4507,17 @@ button.session-card-name:hover { text-decoration: underline; }
   background: #f8fafc;
   color: #0f172a;
 }
+
+/* Static demo (Vercel, no backend) */
+.static-demo-banner {
+  position: sticky; top: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 8px 16px; font-size: 13px;
+  background: #fff7e6; color: #7a5200; border-bottom: 1px solid #f0d48a;
+}
+.static-demo-banner-btn {
+  border: 1px solid #d9a91e; background: #fff; color: #7a5200;
+  border-radius: 999px; padding: 2px 12px; font-size: 12px; cursor: pointer;
+}
+.static-demo-list { margin: 12px 0 12px 18px; display: grid; gap: 6px; }
+.static-demo-list li { font-size: 14px; }

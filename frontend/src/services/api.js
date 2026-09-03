@@ -1,6 +1,11 @@
+import { isStaticDemo } from '../demo/staticMode';
+import { mockApiFetch, getStaticSession } from '../demo/mockApi';
+
 const TOKEN_KEY = 'peerlink_token';
 
 export function getToken() {
+  // In static demo there is no JWT — the mock session acts as the token.
+  if (isStaticDemo() && getStaticSession()) return 'static-demo-token';
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -14,6 +19,9 @@ export function setToken(token) {
  * into a consistent shape: { ok, status, message, details, data }.
  */
 export async function apiFetch(path, { method = 'GET', body, auth = true } = {}) {
+  // Static Vercel demo: no backend — serve mock data so login & all pages work.
+  if (isStaticDemo()) return mockApiFetch(path, { method, body, auth });
+
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
     const token = getToken();
