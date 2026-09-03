@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { GuestRoute } from '../routes/ProtectedRoute';
 import { Alert, Modal } from '../components/ui';
 import { authService } from '../services';
-import { isStaticDemo } from '../demo/staticMode';
+import { isDemoActive } from '../demo/staticMode';
 
 export default function ForgotPassword() {
   const [form, setForm] = useState({ email: '' });
@@ -18,7 +18,7 @@ export default function ForgotPassword() {
   const submit = async (e) => {
     e.preventDefault();
     // Static demo: visual representation only — no email is ever sent.
-    if (isStaticDemo()) {
+    if (isDemoActive()) {
       setSuccess(true);
       setShowVisualOnly(true);
       return;

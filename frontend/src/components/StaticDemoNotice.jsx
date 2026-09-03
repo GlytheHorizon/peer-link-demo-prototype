@@ -1,22 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { isStaticDemo, STATIC_DEMO_MESSAGE } from '../demo/staticMode';
+import { isDemoActive, STATIC_DEMO_MESSAGE } from '../demo/staticMode';
 import { Modal } from './ui';
 
 const SEEN_KEY = 'peerlink_static_demo_seen';
 
 /**
  * Static-demo notice: a popup modal on first visit + a persistent banner.
- * Only renders when VITE_STATIC_DEMO=true (the Vercel static build).
+ * Shows when the demo mock is active — via the VITE_STATIC_DEMO build flag
+ * or the runtime fallback (no backend detected on a deployed host).
  */
 export default function StaticDemoNotice() {
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(() => isDemoActive());
 
   useEffect(() => {
-    if (!isStaticDemo()) return;
-    if (!localStorage.getItem(SEEN_KEY)) setOpen(true);
+    if (isDemoActive() && !localStorage.getItem(SEEN_KEY)) setOpen(true);
+    // The fallback can engage after mount (first failed /api call) — listen for it.
+    const onEngaged = () => {
+      setActive(true);
+      if (!localStorage.getItem(SEEN_KEY)) setOpen(true);
+    };
+    window.addEventListener('peerlink-demo-engaged', onEngaged);
+    return () => window.removeEventListener('peerlink-demo-engaged', onEngaged);
   }, []);
 
-  if (!isStaticDemo()) return null;
+  if (!active) return null;
 
   const dismiss = () => {
     localStorage.setItem(SEEN_KEY, '1');

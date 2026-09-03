@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { GuestRoute } from '../routes/ProtectedRoute';
 import { Alert, Spinner, Modal } from '../components/ui';
 import { authService } from '../services';
-import { isStaticDemo } from '../demo/staticMode';
+import { isDemoActive } from '../demo/staticMode';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -44,7 +44,7 @@ export default function ResetPassword() {
     setBusy(false);
     if (res.ok) {
       setSuccess(true);
-      if (isStaticDemo()) setShowVisualOnly(true);
+      if (isDemoActive()) setShowVisualOnly(true);
     } else {
       setError(res.message);
     }

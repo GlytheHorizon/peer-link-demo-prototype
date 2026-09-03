@@ -1,11 +1,11 @@
-import { isStaticDemo } from '../demo/staticMode';
+import { isStaticDemo, isDemoActive, isLocalHost, markDemoFallbackEngaged } from '../demo/staticMode';
 import { mockApiFetch, getStaticSession } from '../demo/mockApi';
 
 const TOKEN_KEY = 'peerlink_token';
 
 export function getToken() {
   // In static demo there is no JWT — the mock session acts as the token.
-  if (isStaticDemo() && getStaticSession()) return 'static-demo-token';
+  if (isDemoActive() && getStaticSession()) return 'static-demo-token';
   return localStorage.getItem(TOKEN_KEY);
 }
 
@@ -37,8 +37,23 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
       body: body !== undefined ? JSON.stringify(body) : undefined
     });
   } catch (err) {
+    // No backend reachable (static host). Auto-switch to mock demo data —
+    // but never on localhost, where a missing backend is a real dev error.
+    if (!isLocalHost()) {
+      console.warn(`[apiFetch] ${method} ${path} - no backend, falling back to static demo mock`);
+      markDemoFallbackEngaged();
+      return mockApiFetch(path, { method, body, auth });
+    }
     console.error(`[apiFetch] ${method} ${path} - network error:`, err);
     return { ok: false, status: 0, message: 'Cannot reach the server. Is the backend running?', data: null };
+  }
+
+  // Static hosts answer 404/405 for /api/* (no backend functions deployed).
+  // Treat that as "no backend" and serve the mock instead of failing login.
+  if ((res.status === 404 || res.status === 405) && !isLocalHost()) {
+    console.warn(`[apiFetch] ${method} ${path} - got ${res.status}, falling back to static demo mock`);
+    markDemoFallbackEngaged();
+    return mockApiFetch(path, { method, body, auth });
   }
 
   let payload = null;
