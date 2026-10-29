@@ -3,12 +3,11 @@ import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useApi } from '../hooks/useApi';
-import { tutorService, sessionService, matchService, reportService } from '../services';
-import { Spinner, Alert, formatDateTime } from '../components/ui';
+import { tutorService, sessionService, matchService } from '../services';
+import { Spinner, Alert, formatDateTime, Avatar } from '../components/ui';
+import { asDate } from '../utils/datetime';
 
 const RATE_PER_HOUR = 100;
-
-const asDate = (v) => (v instanceof Date ? v : new Date(v));
 
 const fmtShortDate = (d) =>
   asDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -41,9 +40,6 @@ function timeAgo(iso) {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-const initials = (name = '') =>
-  name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-
 function StudentDashboard() {
   const { user } = useAuth();
   const sessions = useApi(sessionService.list, [], 15000);
@@ -51,11 +47,11 @@ function StudentDashboard() {
 
   const all = sessions.data || [];
   const upcoming = all.filter(
-    (s) => s.status === 'accepted' && s.payment_id && new Date(s.scheduled_start) > new Date()
+    (s) => s.status === 'accepted' && s.payment_id && asDate(s.scheduled_start) > new Date()
   );
   const featured = upcoming[0];
   const completed = all.filter((s) => s.status === 'completed');
-  const totalSpent = completed.reduce((sum, s) => sum + Math.max(0, (new Date(s.scheduled_end) - new Date(s.scheduled_start)) / 3600000) * (Number(s.rate_per_hour) || RATE_PER_HOUR), 0);
+  const totalSpent = completed.reduce((sum, s) => sum + Math.max(0, (asDate(s.scheduled_end) - asDate(s.scheduled_start)) / 3600000) * (Number(s.rate_per_hour) || RATE_PER_HOUR), 0);
   const recs = (matches.data || []).slice(0, 3);
   const greetName = (user?.first_name || 'there').toUpperCase();
 
@@ -114,7 +110,7 @@ function StudentDashboard() {
           <div className="tutor-row">
             {recs.map((t) => (
               <div className="tutor-card" key={`${t.tutor_profile_id}-${t.subject_id}`}>
-                <span className="tutor-avatar">{initials(t.tutor_name)}</span>
+                <Avatar name={t.tutor_name} src={t.tutor_picture} className="tutor-avatar" />
                 <div className="tutor-body">
                   <div className="tutor-head">
                     <b className="tutor-name">{t.tutor_name}</b>
@@ -184,7 +180,7 @@ function TutorDashboard() {
   const studentMap = new Map();
   for (const s of all) {
     if (s.status === 'rejected') continue;
-    if (!studentMap.has(s.student_id)) studentMap.set(s.student_id, { student_id: s.student_id, name: s.student_name, sessions: [] });
+    if (!studentMap.has(s.student_id)) studentMap.set(s.student_id, { student_id: s.student_id, name: s.student_name, picture: s.student_picture, sessions: [] });
     studentMap.get(s.student_id).sessions.push(s);
   }
   const myStudents = [...studentMap.values()].map((st) => {
@@ -296,7 +292,7 @@ function TutorDashboard() {
           ) : (
             pending.slice(0, 3).map((s) => (
               <div className="req-row" key={s.id}>
-                <span className="req-avatar">{initials(s.student_name)}</span>
+                <Avatar name={s.student_name} src={s.student_picture} className="req-avatar" />
                 <div className="req-main">
                   <b className="req-name">{s.student_name}</b>
                   <span className="req-subject">{s.subject_name}</span>
@@ -329,7 +325,7 @@ function TutorDashboard() {
           ) : (
             myStudents.slice(0, 2).map((st) => (
               <div className="req-row" key={st.student_id}>
-                <span className="req-avatar">{initials(st.name)}</span>
+                <Avatar name={st.name} src={st.picture} className="req-avatar" />
                 <div className="req-main">
                   <b className="req-name">{st.name}</b>
                   <span className="req-subject">{st.latestSubject}</span>
@@ -349,68 +345,10 @@ function TutorDashboard() {
   );
 }
 
-function FacultyDashboard() {
-  const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-
-  useEffect(() => {
-    reportService.overview().then((res) => {
-      if (res.ok) setOverview(res.data);
-      else setErr(res.message);
-      setLoading(false);
-    });
-  }, []);
-
-  const byRole = overview?.users_by_role || [];
-  const byStatus = overview?.sessions_by_status || [];
-
-  return (
-    <div>
-      <h2>Faculty Dashboard</h2>
-      {loading && <Spinner />}
-      <Alert type="error">{err}</Alert>
-      {overview && (
-        <>
-          <div className="stat-cards">
-            <div className="stat-card"><b>{overview.users}</b><span>Active users</span></div>
-            <div className="stat-card"><b>{overview.sessions}</b><span>Total sessions</span></div>
-            <div className="stat-card"><b>{overview.avg_rating}</b><span>Average rating</span></div>
-            <div className="stat-card"><b>{overview.completed_last_30_days}</b><span>Completed (30 days)</span></div>
-          </div>
-          <div className="grid-2">
-            <section className="card">
-              <h3>Users by role</h3>
-              {byRole.map((r) => (
-                <div key={r.role} className="list-row">
-                  <b className="cap">{r.role}</b>
-                  <span className="badge badge-accepted">{r.total}</span>
-                </div>
-              ))}
-            </section>
-            <section className="card">
-              <h3>Sessions by status</h3>
-              {byStatus.map((r) => (
-                <div key={r.status} className="list-row">
-                  <b className="cap">{r.status}</b>
-                  <span className="badge badge-accepted">{r.total}</span>
-                </div>
-              ))}
-            </section>
-          </div>
-          <div className="row-actions">
-            <Link className="btn btn-primary" to="/reports">View Detailed Reports</Link>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 export default function RoleDashboard() {
   const { user } = useAuth();
   if (user?.role_key === 'student') return <StudentDashboard />;
   if (user?.role_key === 'tutor') return <TutorDashboard />;
-  if (user?.role_key === 'faculty') return <FacultyDashboard />;
   return <Navigate to="/admin/verifications" replace />;
 }

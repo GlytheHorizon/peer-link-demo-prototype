@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { sessionService, reportService } from '../services';
 import { Modal, Spinner, Alert } from './ui';
+import { asDate } from '../utils/datetime';
 
 const REPORT_REASONS = [
   'Tutor Missed Session',
@@ -135,7 +136,7 @@ export default function ReportModal({
           <option value="">None / Not related to a session</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.topic || s.subject_name || 'Session'} · {new Date(s.scheduled_start).toLocaleDateString()} · {s.status}
+              {s.topic || s.subject_name || 'Session'} · {asDate(s.scheduled_start).toLocaleDateString()} · {s.status}
             </option>
           ))}
         </select>

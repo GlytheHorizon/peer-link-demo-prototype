@@ -303,6 +303,16 @@ a:hover { text-decoration: underline; }
 .modal-head h3 { margin: 0; }
 .modal-head .btn { font-size: 1.4rem; padding: 2px 10px; }
 .confirm-modal { max-width: 430px; }
+.confirm-photo-preview {
+  display: block;
+  width: 130px;
+  height: 130px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 16px auto 0;
+  border: 3px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
+}
 .confirm-message { white-space: pre-line; color: var(--muted); margin: 14px 0 6px; line-height: 1.6; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
@@ -497,7 +507,8 @@ a:hover { text-decoration: underline; }
   position: sticky; top: 0; z-index: 50;
 }
 .topbar-title { font-weight: 800; letter-spacing: 0.01em; }
-.topbar-user { margin-left: auto; font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.topbar-user { margin-left: auto; display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.topbar-avatar { width: 30px; height: 30px; font-size: 0.7rem; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; font-weight: 800; }
 .topbar-user .role-tag {
   margin-left: 10px;
   background: var(--royal-soft);
@@ -611,13 +622,17 @@ a:hover { text-decoration: underline; }
 .feature-card p { color: var(--muted); font-size: 0.92rem; }
 
 .how { display: grid; grid-template-columns: 1.1fr 1fr; gap: 26px; padding: 26px 0 10px; align-items: start; }
+.how h2 { grid-column: 1 / -1; text-align: center; }
 @media (max-width: 800px) { .how { grid-template-columns: 1fr; } }
-.how-list { list-style: none; padding: 0; margin: 14px 0 0; }
+.how .quote { text-align: center; }
+.how-list { list-style: none; padding: 0; margin: 14px 0 0; text-align: center; }
 .how-list li {
   display: flex; gap: 14px; align-items: flex-start;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
   font-size: 0.98rem;
+  justify-content: center;
+  text-align: center;
 }
 .how-list li:last-child { border-bottom: none; }
 .how-num {
@@ -2103,17 +2118,6 @@ button.session-card-name:hover { text-decoration: underline; }
 .pill--reschedule { background: var(--amber-bg); color: var(--amber); }
 
 .session-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
-.cancel-countdown {
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: var(--amber);
-  background: var(--amber-bg);
-  border-radius: 999px;
-  padding: 6px 12px;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-}
 .cancel-reasons { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .no-refund-warning {
   background: var(--red-bg);
@@ -2924,6 +2928,17 @@ button.session-card-name:hover { text-decoration: underline; }
 
 /* ---------- Tutor profile ---------- */
 .tutor-head { display: flex; gap: 18px; align-items: center; margin-bottom: 18px; }
+
+/* Uploaded profile pictures (falls back to initials when absent) */
+.avatar-media { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.avatar-media .avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
+
 .avatar {
   width: 62px; height: 62px;
   border-radius: 16px;
@@ -3603,6 +3618,37 @@ button.session-card-name:hover { text-decoration: underline; }
 }
 .pmethod-link:hover { background: var(--royal-dark); transform: translateY(-1px); }
 
+/* ---------- Stripe card form ---------- */
+.stripe-card-form { display: flex; flex-direction: column; gap: 14px; padding: 4px 2px; }
+.stripe-card-element {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+.stripe-card-element.StripeElement--focus { border-color: var(--royal); box-shadow: 0 0 0 2px rgba(67,97,238,0.25); }
+.stripe-card-element.StripeElement--invalid { border-color: var(--danger, var(--red)); }
+.stripe-card-error { color: var(--danger, var(--red)); font-size: 0.85rem; margin: 0; min-height: 1.2em; }
+.stripe-card-saved { display: flex; flex-direction: column; gap: 8px; }
+.stripe-saved-method {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.stripe-saved-method.is-default { border-color: var(--royal); background: var(--royal-soft); }
+.stripe-saved-brand { font-weight: 700; color: var(--text); }
+.stripe-saved-detail { color: var(--muted); font-size: 0.82rem; }
+.stripe-saved-actions { display: flex; gap: 8px; align-items: center; }
+.stripe-saved-default { font-size: 0.78rem; color: var(--muted); }
+
 /* ---------- Profile page ---------- */
 .profile-header {
   background: var(--surface);
@@ -3629,6 +3675,26 @@ button.session-card-name:hover { text-decoration: underline; }
   justify-content: center;
   flex-shrink: 0;
 }
+.profile-photo-editor { margin-bottom: 16px; }
+.profile-photo-editor .form-section-title { margin-top: 0; }
+.profile-photo-editor-row { display: flex; align-items: center; gap: 16px; }
+.profile-photo-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+.profile-photo-editor-copy { min-width: 0; }
+.profile-photo-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-photo-btn { cursor: pointer; text-align: center; }
+.profile-photo-btn.disabled { opacity: 0.6; cursor: not-allowed; }
+.profile-photo-hint { margin: 6px 0 0; }
+.profile-photo-success { margin: 4px 0 0; color: var(--green); font-size: 0.82rem; }
+.profile-photo-error { margin: 4px 0 0; color: var(--red); font-size: 0.82rem; }
 .profile-identity { flex: 1; min-width: 0; }
 .profile-identity h3 { margin: 0 0 2px; font-size: 1.3rem; }
 .profile-age { margin: 0; color: var(--muted); font-size: 0.95rem; }
@@ -3761,6 +3827,32 @@ button.session-card-name:hover { text-decoration: underline; }
   color: var(--green);
   flex-shrink: 0;
 }
+.payout-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.payout-card-head h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.payout-card-head p { margin: 0; max-width: 560px; }
+.payout-pill {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.payout-pill.is-on { background: var(--green-bg, #e6f4ec); color: var(--green, #1c7c4a); }
+.payout-pill.is-off { background: #fdf0e2; color: #a35b13; }
+.payout-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfbff;
+}
+.payout-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.86rem; }
+.payout-row span { color: var(--muted); }
+.payout-row b { color: var(--text); font-weight: 700; }
 .earn-total-info { display: flex; flex-direction: column; gap: 2px; }
 .earn-total-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .earn-total-value { font-size: 2rem; font-weight: 800; color: var(--text); line-height: 1.1; }
@@ -4507,3 +4599,205 @@ button.session-card-name:hover { text-decoration: underline; }
   background: #f8fafc;
   color: #0f172a;
 }
+
+/* ============================================================
+   Jitsi Meet Video Session Overlay
+   ============================================================ */
+
+/* Full-viewport overlay that hosts the Jitsi iFrame */
+.jitsi-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #0d0c1e;
+}
+
+/* Header bar above the video frame */
+.jitsi-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: rgba(13, 12, 30, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  gap: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.jitsi-overlay-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+
+/* Pulsing red dot to indicate live session */
+.jitsi-live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+  animation: jitsi-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes jitsi-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  60%  { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* "End Session" close button */
+.jitsi-close-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1.5px solid rgba(239, 68, 68, 0.5);
+  border-radius: 99px;
+  color: #fca5a5;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.jitsi-close-btn:hover {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.8);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Loading state */
+.jitsi-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+}
+
+.jitsi-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #4361ee;
+  border-radius: 50%;
+  animation: jitsi-spin 0.8s linear infinite;
+}
+
+@keyframes jitsi-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error state */
+.jitsi-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95rem;
+  text-align: center;
+  padding: 24px;
+}
+
+/* The actual iFrame container (fills all remaining space) */
+.jitsi-frame-container {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* iFrame itself (Jitsi injects it) */
+.jitsi-frame-container iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none;
+  display: block;
+}
+
+/* ---- "Join Session" button on the session card ---- */
+.action-btn--video {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: linear-gradient(135deg, #4361ee, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 2px 12px rgba(67, 97, 238, 0.45);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.action-btn--video:hover {
+  opacity: 0.92;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 18px rgba(67, 97, 238, 0.55);
+}
+.action-btn--video:active {
+  transform: none;
+  box-shadow: none;
+}
+.action-btn--video svg {
+  flex-shrink: 0;
+}
+
+/* Upcoming banner "Join Video Call" button */
+.btn-join-video {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 26px;
+  background: linear-gradient(135deg, #4361ee, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.97rem;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  box-shadow: 0 3px 16px rgba(67, 97, 238, 0.5);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-join-video:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(67, 97, 238, 0.6);
+}
+.btn-join-video:active { transform: none; }
+
+/* "Now Live" badge for sessions happening right now */
+.pill--live {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff !important;
+  animation: live-glow 2s ease-in-out infinite;
+}
+@keyframes live-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.45); }
+  50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+}
+

@@ -27,6 +27,7 @@ export function ConfirmProvider({ children }) {
         <ConfirmDialog
           title={dialog.title}
           message={dialog.message}
+          preview={dialog.preview}
           confirmText={dialog.confirmText}
           cancelText={dialog.cancelText}
           danger={dialog.danger}

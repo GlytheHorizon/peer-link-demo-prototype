@@ -3,7 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { studentService, conversationService, reportService } from '../services';
-import { Spinner, Alert, formatDate, EmptyState } from '../components/ui';
+import { Spinner, Alert, formatDate, EmptyState, Avatar } from '../components/ui';
 import ReportModal from '../components/ReportModal';
 
 const STRAND_LABELS = { STEM: 'STEM', GAS: 'GAS', ICT: 'ICT', ABM: 'ABM', HUMSS: 'HUMSS', JHS: 'JHS (Grade 7-10)' };
@@ -13,10 +13,6 @@ const MODE_LABELS = {
   f2f: 'Face-to-face sessions',
   both: 'Online & In-Person'
 };
-
-const initialsOf = (name) => (
-  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-);
 
 function InfoRow({ label, value }) {
   return (
@@ -80,7 +76,7 @@ export default function StudentProfile() {
       <Link className="btn btn-ghost" to="/sessions">← Back to sessions</Link>
       {msg && <Alert type={msg.type}>{msg.text}</Alert>}
       <div className="profile-header">
-        <div className="profile-avatar" aria-hidden="true">{initialsOf(student.full_name)}</div>
+        <Avatar name={student.full_name} src={student.profile_picture} className="profile-avatar" />
         <div className="profile-identity">
           <h3>{student.full_name}</h3>
           <p className="profile-age">{student.email}</p>

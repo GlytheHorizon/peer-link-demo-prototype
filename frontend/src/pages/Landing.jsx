@@ -6,7 +6,8 @@ const FEATURES = [
   { title: 'Smart Matching', text: 'Automated 0–100 compatibility scoring across subject, proficiency, hourly rate, course level, availability & ratings.' },
   { title: 'Messaging', text: 'Chat directly with tutors before booking so you can confirm the right fit.' },
   { title: 'Scheduling', text: 'Request sessions, get tutor confirmation, and prevent overlapping bookings automatically.' },
-  { title: 'Ratings & Reports', text: 'Evaluate sessions after completion; faculty and admins get live tutoring reports.' }
+  { title: 'Video Sessions', text: 'Face-to-face or online tutoring in real time with built-in Jitsi Meet video rooms.' },
+  { title: 'Ratings & Reports', text: 'Evaluate sessions after completion; admins get live tutoring reports.' }
 ];
 
 export default function Landing() {
@@ -63,14 +64,14 @@ export default function Landing() {
           <li>Register as a student or tutor</li>
           <li>Complete your profile & pick your subjects</li>
           <li>Run automatic matching and browse your best-fit tutors</li>
-          <li>Message, schedule, attend, and evaluate your sessions</li>
+          <li>Message, schedule, attend, and evaluate your sessions — with built-in video via Jitsi Meet</li>
         </ol>
         <div className="quote muted">Demo accounts (passwords in the Login page dropdown): student@peerlink.edu ·
-          maria@peerlink.edu · gerome@peerlink.edu · kiel@peerlink.edu · faculty@peerlink.edu · admin@peerlink.edu</div>
+          maria@peerlink.edu · gerome@peerlink.edu · kiel@peerlink.edu · admin@peerlink.edu</div>
       </section>
 
       <footer className="landing-footer muted">
-        Peerlink Demo (JC)
+        Peerlink (2026)
       </footer>
     </div>
   );

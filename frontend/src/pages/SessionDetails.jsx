@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { asDate } from '../utils/datetime';
 import { sessionService, evaluationService } from '../services';
 import { Spinner, Alert, StatusBadge, RatingStars, formatDateTime } from '../components/ui';
-import CancelSessionModal, { useCancelWindow, CancelCountdown } from '../components/CancelSessionModal';
+import CancelSessionModal from '../components/CancelSessionModal';
+import JitsiMeetModal from '../components/JitsiMeetModal';
 
 const LEARNING_MODE_LABELS = {
   online: 'Online',
@@ -13,17 +15,12 @@ const LEARNING_MODE_LABELS = {
 };
 const modeLabel = (m) => LEARNING_MODE_LABELS[m] || '—';
 
-/** Student cancel control: active only during the 5-minute free-cancel window. */
-function StudentCancelDetails({ session, busy, onCancel }) {
-  const { active } = useCancelWindow(session);
-  if (!active) return null;
+/** Student cancel control: available at any time while the session is unpaid. */
+function StudentCancelDetails({ busy, onCancel }) {
   return (
-    <>
-      <CancelCountdown session={session} />
-      <button className="btn btn-danger btn-block" disabled={busy} onClick={onCancel}>
-        Cancel Session
-      </button>
-    </>
+    <button className="btn btn-danger btn-block" disabled={busy} onClick={onCancel}>
+      Cancel Session
+    </button>
   );
 }
 
@@ -46,6 +43,16 @@ export default function SessionDetails() {
   const [rejecting, setRejecting] = useState(false);
 
   const [cancelling, setCancelling] = useState(false);
+  const [jitsiOpen, setJitsiOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  // Tick every 30 seconds so "Join" button appears/disappears as time passes
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'PeerLink User';
 
   const load = async () => {
     const res = await sessionService.get(id);
@@ -93,6 +100,18 @@ export default function SessionDetails() {
 
   const isTutor = user.id === session.tutor_id;
   const isStudent = user.id === session.student_id;
+  const showSchedule = !!session.payment_id && (session.status === 'accepted' || session.status === 'completed');
+
+  const canJoinJitsi = (() => {
+    if (!session.jitsi_room_name) return false;
+    if (session.learning_mode !== 'online' && session.learning_mode !== 'both') return false;
+    if (!session.payment_id || session.status !== 'accepted') return false;
+    const start = asDate(session.scheduled_start).getTime();
+    const end   = asDate(session.scheduled_end).getTime();
+    const t = now.getTime();
+    return t >= start - 15 * 60 * 1000 && t <= end + 30 * 60 * 1000;
+  })();
+  const sessionIsLive = session.jitsi_room_name && now.getTime() >= asDate(session.scheduled_start).getTime() && now.getTime() <= asDate(session.scheduled_end).getTime();
 
   return (
     <div>
@@ -106,7 +125,7 @@ export default function SessionDetails() {
           <div>
             <h3>{session.subject_name} <StatusBadge status={session.status} /></h3>
             <p className="muted small">{session.subject_code}</p>
-            <p><b>When:</b> {formatDateTime(session.scheduled_start)} → {formatDateTime(session.scheduled_end)}</p>
+            {showSchedule && <p><b>When:</b> {formatDateTime(session.scheduled_start)} → {formatDateTime(session.scheduled_end)}</p>}
             {session.learning_mode && <p><b>Learning Mode:</b> {modeLabel(session.learning_mode)}</p>}
             <p><b>Student:</b> {session.student_name}</p>
             <p><b>Tutor:</b> {session.tutor_name}</p>
@@ -121,6 +140,15 @@ export default function SessionDetails() {
             <p className="muted small">Requested {formatDateTime(session.created_at)}</p>
           </div>
           <div className="session-actions">
+            {canJoinJitsi && (
+              <button className="action-btn action-btn--video" style={{ marginBottom: 12 }} onClick={() => setJitsiOpen(true)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="23 7 16 12 23 17 23 7" />
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+                {sessionIsLive ? 'Join Live Session' : 'Join Video Session'}
+              </button>
+            )}
             {isTutor && session.status === 'pending' && (
               <>
                 <button
@@ -203,7 +231,7 @@ export default function SessionDetails() {
             )}
             {isStudent && session.status === 'pending' && (
               <>
-                <StudentCancelDetails session={session} busy={busy} onCancel={() => setCancelling(true)} />
+                <StudentCancelDetails busy={busy} onCancel={() => setCancelling(true)} />
                 <button
                   className="btn btn-danger btn-block"
                   disabled={busy}
@@ -226,7 +254,7 @@ export default function SessionDetails() {
                 </button>
               </>
             )}
-            {isTutor && ['accepted'].includes(session.status) && !session.payment_id && (
+            {isTutor && ['accepted'].includes(session.status) && !session.payment_id && !session.pending_payment_id && (
               <button
                 className="btn btn-ghost btn-block"
                 disabled={busy}
@@ -238,8 +266,8 @@ export default function SessionDetails() {
                 Cancel session
               </button>
             )}
-            {isStudent && ['accepted'].includes(session.status) && !session.payment_id && (
-              <StudentCancelDetails session={session} busy={busy} onCancel={() => setCancelling(true)} />
+            {isStudent && ['accepted'].includes(session.status) && !session.payment_id && !session.pending_payment_id && (
+              <StudentCancelDetails busy={busy} onCancel={() => setCancelling(true)} />
             )}
           </div>
         </div>
@@ -288,6 +316,13 @@ export default function SessionDetails() {
           session={session}
           onClose={() => setCancelling(false)}
           onCancelled={(updated) => { setCancelling(false); setMsg({ type: 'success', text: 'Session cancelled' }); setSession(updated); }}
+        />
+      )}
+      {jitsiOpen && session.jitsi_room_name && (
+        <JitsiMeetModal
+          roomName={session.jitsi_room_name}
+          displayName={displayName}
+          onClose={() => setJitsiOpen(false)}
         />
       )}
     </div>

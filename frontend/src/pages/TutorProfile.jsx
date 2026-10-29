@@ -3,12 +3,8 @@ import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { tutorService, conversationService } from '../services';
-import { Spinner, Alert, RatingStars, formatDate, EmptyState } from '../components/ui';
+import { Spinner, Alert, RatingStars, formatDate, EmptyState, Avatar } from '../components/ui';
 import ReportModal from '../components/ReportModal';
-
-const initialsOf = (name) => (
-  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-);
 
 function InfoRow({ label, value }) {
   return (
@@ -72,7 +68,7 @@ export default function TutorProfile() {
       <Link className="btn btn-ghost" to="/matches">← Back to matches</Link>
       {msg && <Alert type={msg.type}>{msg.text}</Alert>}
       <div className="profile-header">
-        <div className="profile-avatar" aria-hidden="true">{initialsOf(tutor.full_name)}</div>
+        <Avatar name={tutor.full_name} src={tutor.profile_picture} className="profile-avatar" />
         <div className="profile-identity">
           <h3>{tutor.full_name}</h3>
           <p className="profile-age">{tutor.email}</p>

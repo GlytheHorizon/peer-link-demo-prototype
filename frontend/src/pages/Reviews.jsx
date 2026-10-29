@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { tutorService, evaluationService } from '../services';
-import { Spinner, Alert, RatingStars, formatDate, formatDateTime, EmptyState } from '../components/ui';
+import { Spinner, Alert, RatingStars, formatDate, formatDateTime, EmptyState, Avatar } from '../components/ui';
 
 const FILTERS = [
   { key: 'latest', label: 'Latest' },
@@ -9,10 +9,6 @@ const FILTERS = [
   { key: 'highest', label: 'Highest stars' },
   { key: 'lowest', label: 'Lowest stars' }
 ];
-
-const initialsOf = (name) => (
-  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-);
 
 export default function Reviews() {
   const { id } = useParams();
@@ -61,7 +57,7 @@ export default function Reviews() {
       <Link className="btn btn-ghost" to={tutor ? `/tutors/${tutor.user_id}` : '/matches'}>← Back to profile</Link>
 
       <div className="reviews-summary card">
-        <div className="profile-avatar" aria-hidden="true">{initialsOf(tutor?.full_name)}</div>
+        <Avatar name={tutor?.full_name} src={tutor?.profile_picture} className="profile-avatar" />
         <div className="reviews-summary-main">
           <h3>{tutor ? tutor.full_name : 'Tutor'} — Reviews</h3>
           <RatingStars rating={tutor?.avg_rating} />
@@ -90,7 +86,7 @@ export default function Reviews() {
         <div className="review-list">
           {sorted.map((r) => (
             <div className="review-card" key={r.id}>
-              <span className="mini-avatar review-avatar" aria-hidden="true">{initialsOf(r.student_name)}</span>
+              <Avatar name={r.student_name} src={r.student_picture} className="mini-avatar review-avatar" />
               <div className="review-card-main">
                 <div className="review-card-top">
                   <b>{r.student_name}</b>

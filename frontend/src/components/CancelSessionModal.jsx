@@ -1,36 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { sessionService } from '../services';
 import { Modal, Alert } from './ui';
-
-export const CANCEL_WINDOW_MS = 5 * 60 * 1000;
-
-/** Counts down the student's free-cancel window (5 min from booking). */
-export function useCancelWindow(session) {
-  const deadline = session ? new Date(session.created_at).getTime() + CANCEL_WINDOW_MS : 0;
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!session) return undefined;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [session, deadline]);
-
-  return { active: deadline - now > 0, remaining: Math.max(deadline - now, 0) };
-}
-
-const fmtRemaining = (ms) => {
-  const total = Math.ceil(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-};
-
-/** Visible "You can cancel within MM:SS" indicator for the student. */
-export function CancelCountdown({ session }) {
-  const { remaining } = useCancelWindow(session);
-  return <span className="cancel-countdown">You can cancel within {fmtRemaining(remaining)}</span>;
-}
+import { asDate } from '../utils/datetime';
 
 const REASONS = [
   { key: 'mistake', label: 'Booked by mistake', hint: 'I did not mean to book this session' },
@@ -62,7 +33,7 @@ export default function CancelSessionModal({ session, onClose, onCancelled }) {
       <form className="form" onSubmit={submit}>
         <div className="pay-summary">
           <b className="pay-tutor">{session.subject_name} with {session.tutor_name}</b>
-          <div className="pay-row"><span>When</span><b>{new Date(session.scheduled_start).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</b></div>
+          <div className="pay-row"><span>When</span><b>{asDate(session.scheduled_start).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}</b></div>
         </div>
 
         {session.payment_id && (
@@ -97,7 +68,6 @@ export default function CancelSessionModal({ session, onClose, onCancelled }) {
             onChange={(e) => setOtherText(e.target.value)}
           />
         )}
-        <p className="muted small">You can only cancel within 5 minutes of booking — this window is about to close.</p>
 
         {err && <Alert type="error">{err}</Alert>}
         <div className="row-actions" style={{ marginTop: 16 }}>

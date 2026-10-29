@@ -1,6 +1,9 @@
 const { ApiError, asyncHandler, ok } = require('../utils/http');
 const conversationModel = require('../models/conversationModel');
 const paymentModel = require('../models/conversationPaymentModel');
+const sessionModel = require('../models/sessionModel');
+const { generateJitsiRoomName } = require('../utils/jitsi');
+const stripeCharges = require('../services/stripeCharges');
 
 /** Loads the conversation and asserts the user is a participant. */
 async function participant(conversationId, userId) {
@@ -68,6 +71,16 @@ const acceptPayment = asyncHandler(async (req, res) => {
   await tutorGate(Number(req.params.id), req.user.id);
   const payment = await pendingPayment(req.params.id, Number(req.params.pid));
   await paymentModel.setStatus(payment.id, 'accepted');
+
+  // Generate a Jitsi room for online/both sessions once payment is confirmed.
+  if (payment.session_id) {
+    const session = await sessionModel.findById(payment.session_id);
+    if (session && !session.jitsi_room_name && (session.learning_mode === 'online' || session.learning_mode === 'both')) {
+      const roomName = generateJitsiRoomName(session.id);
+      await sessionModel.setJitsiRoom(session.id, roomName);
+    }
+  }
+
   ok(res, 200, await paymentModel.findById(payment.id), 'Payment confirmed — clearance complete');
 });
 
@@ -77,6 +90,13 @@ const rejectPayment = asyncHandler(async (req, res) => {
   const payment = await pendingPayment(req.params.id, Number(req.params.pid));
   const { reason } = req.body || {};
   const cleanReason = reason && String(reason).trim() ? String(reason).trim().slice(0, 300) : null;
+
+  // The card was already charged when the student sent the payment, so
+  // rejecting it gives the student their money back.
+  if (payment.stripe_payment_intent_id) {
+    await stripeCharges.refundCharge(payment.stripe_payment_intent_id);
+  }
+
   await paymentModel.setStatus(payment.id, 'rejected', cleanReason);
   ok(res, 200, await paymentModel.findById(payment.id), 'Payment rejected — the student can send a new one');
 });

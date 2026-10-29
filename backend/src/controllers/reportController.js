@@ -3,7 +3,7 @@ const { query } = require('../config/db');
 const log = require('../services/activityLogService').log;
 const userModel = require('../models/userModel');
 
-/** GET /api/reports/overview — headline metrics. Faculty + admin. */
+/** GET /api/reports/overview — headline metrics. Admin only. */
 const overview = asyncHandler(async (req, res) => {
   const [users, byRole, sessions, byStatus, evaluations, matches, completedLast30] = await Promise.all([
     query('SELECT COUNT(*) AS total FROM users WHERE is_active = TRUE'),

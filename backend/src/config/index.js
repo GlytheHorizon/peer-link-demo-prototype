@@ -1,4 +1,6 @@
-require('dotenv').config();
+// override:true so backend/.env is the single source of truth; a stray PORT=0
+// in the shell environment would otherwise silently bind a random port.
+require('dotenv').config({ override: true });
 
 module.exports = {
   port: Number(process.env.PORT || 5000),

@@ -131,7 +131,7 @@ export default function MatchingResults() {
           role="tab"
           aria-selected={mode === 'smart'}
           className={`mode-tab ${mode === 'smart' ? 'on' : ''}`}
-          onClick={() => setMode('smart')}
+          onClick={() => { setMode('smart'); setQuery(''); }}
         >
           Smart Match
         </button>
@@ -146,20 +146,22 @@ export default function MatchingResults() {
         </button>
       </div>
 
-      <div className="card manual-search">
-        <input
-          type="search"
-          placeholder="Search tutors by name or subject…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search tutors"
-        />
-        {query && (
-          <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">
-            ×
-          </button>
-        )}
-      </div>
+      {mode === 'manual' && (
+        <div className="card manual-search">
+          <input
+            type="search"
+            placeholder="Search tutors by name or subject…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search tutors"
+          />
+          {query && (
+            <button type="button" className="search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+              ×
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="section-row">
         <span className="section-label">

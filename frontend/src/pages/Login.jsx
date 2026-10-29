@@ -108,8 +108,7 @@ export default function Login() {
                   ['mike.chen@peerlink.edu', 'Student@123'],
                   ['maria@peerlink.edu', 'Tutor@123'],
                   ['gerome@peerlink.edu', 'Tutor@123'],
-                  ['kiel@peerlink.edu', 'Tutor@123'],
-                  ['faculty@peerlink.edu', 'Faculty@123']
+                  ['kiel@peerlink.edu', 'Tutor@123']
                 ].map(([email, password]) => (
                   <tr
                     key={email}

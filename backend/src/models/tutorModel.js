@@ -54,7 +54,7 @@ async function createProfile({ userId, course, max_year_level, bio, availability
 async function updateProfile(userId, fields) {
   const allowed = [
     'course', 'max_year_level', 'bio', 'availability', 'tags', 'age', 'grade_level', 'school', 'strand',
-    'contact_no', 'gender',
+    'contact_no', 'gender', 'profile_picture',
     'subjects_teach', 'learning_mode', 'preferred_schedule', 'preferred_time',
     'verification_status'
   ];

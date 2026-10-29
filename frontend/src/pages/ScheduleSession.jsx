@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { subjectService, sessionService, matchService, tutorService } from '../services';
+import { asDate } from '../utils/datetime';
 import { Spinner, Alert } from '../components/ui';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -13,8 +14,8 @@ const fmtTime = (d) => {
   return `${h24 % 12 || 12}:${pad(d.getMinutes())}${ap}`;
 };
 const fmtRange = (startIso, endIso) => {
-  const s = new Date(startIso);
-  const e = new Date(endIso);
+  const s = asDate(startIso);
+  const e = asDate(endIso);
   return `${fmtDate(s)} – ${fmtTime(s)} – ${fmtTime(e)}`;
 };
 
@@ -27,8 +28,8 @@ function nextFreeSlot(mine, offsetHours = 1, maxSlots = 96) {
     start.setMinutes(0, 0, 0);
     const end = new Date(start.getTime() + 3600000);
     const clashes = occupied.some((s) => {
-      const s1 = new Date(s.scheduled_start).getTime();
-      const e1 = new Date(s.scheduled_end).getTime();
+      const s1 = asDate(s.scheduled_start).getTime();
+      const e1 = asDate(s.scheduled_end).getTime();
       return start.getTime() < e1 && end.getTime() > s1;
     });
     if (!clashes) return { start, end };

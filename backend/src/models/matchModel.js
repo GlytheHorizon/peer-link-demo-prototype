@@ -14,7 +14,7 @@ async function upsert({ studentProfileId, tutorProfileId, subjectId, score, brea
 async function findByStudent(studentProfileId) {
   return query(
     `SELECT m.id, m.subject_id, m.compatibility_score, m.score_breakdown, m.created_at,
-            m.tutor_profile_id, t.user_id AS tutor_user_id,
+            m.tutor_profile_id, t.user_id AS tutor_user_id, t.profile_picture AS tutor_picture,
             CONCAT(u.first_name, ' ', u.last_name) AS tutor_name, u.email AS tutor_email,
             s.code AS subject_code, s.name AS subject_name,
             ts.rate_per_hour
@@ -31,7 +31,7 @@ async function findByStudent(studentProfileId) {
 
 async function findById(id) {
   const rows = await query(
-    `SELECT m.*, t.user_id AS tutor_user_id,
+    `SELECT m.*, t.user_id AS tutor_user_id, t.profile_picture AS tutor_picture,
             CONCAT(u.first_name, ' ', u.last_name) AS tutor_name, u.email AS tutor_email,
             s.code AS subject_code, s.name AS subject_name
      FROM matches m
@@ -46,7 +46,7 @@ async function findById(id) {
 
 async function findForStudentAndSubject(studentProfileId, subjectId) {
   return query(
-    `SELECT m.*, t.user_id AS tutor_user_id,
+    `SELECT m.*, t.user_id AS tutor_user_id, t.profile_picture AS tutor_picture,
             CONCAT(u.first_name, ' ', u.last_name) AS tutor_name, u.email AS tutor_email
      FROM matches m
      JOIN tutor_profiles t ON t.id = m.tutor_profile_id

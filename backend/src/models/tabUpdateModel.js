@@ -82,11 +82,6 @@ async function latestForUser(userId, role) {
     if (resources[0]?.latest) tabs['/resources'] = iso(resources[0].latest);
   }
 
-  if (role === 'faculty') {
-    const resources = await query('SELECT MAX(created_at) AS latest FROM resources');
-    if (resources[0]?.latest) tabs['/resources'] = iso(resources[0].latest);
-  }
-
   if (role === 'admin') {
     const users = await query('SELECT MAX(created_at) AS latest FROM users');
     const subjects = await query(

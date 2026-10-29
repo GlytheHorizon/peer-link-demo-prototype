@@ -21,7 +21,7 @@ const updateMe = asyncHandler(async (req, res) => {
   ok(res, 200, await userModel.findById(req.user.id), 'Profile updated');
 });
 
-/** GET /api/users — list users (faculty + admin). */
+/** GET /api/users — list users (admin only). */
 const listUsers = asyncHandler(async (req, res) => {
   const { role, search, page, limit } = req.query;
   const data = await userModel.list({ role, search, page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 100) });
@@ -34,7 +34,7 @@ const heartbeat = asyncHandler(async (req, res) => {
   ok(res, 200, { last_seen_at: new Date().toISOString() });
 });
 
-/** GET /api/users/:id — view a user (faculty + admin). */
+/** GET /api/users/:id — view a user (admin only). */
 const getUser = asyncHandler(async (req, res) => {
   const user = await userModel.findById(Number(req.params.id));
   if (!user) throw new ApiError(404, 'User not found');

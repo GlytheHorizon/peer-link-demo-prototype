@@ -27,6 +27,15 @@ function errorHandler(err, req, res, _next) {
     });
   }
 
+  // New: surface DB errors clearly to the caller instead of a generic 500
+  if (err && err.code && err.message) {
+    console.error('[DB_ERROR]', err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'A database error occurred'
+    });
+  }
+
   console.error('[UNHANDLED]', err);
   return res.status(500).json({
     success: false,

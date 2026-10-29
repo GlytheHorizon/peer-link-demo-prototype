@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute, { GuestRoute, ApprovedTutorRoute } from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
+import { StripeProvider } from './context/StripeContext';
 
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -61,6 +62,7 @@ const studentTutorShell = (page) => (
 
 export default function App() {
   return (
+    <StripeProvider>
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
@@ -88,7 +90,7 @@ export default function App() {
       <Route path="/sessions/new" element={shell(['student'], <ScheduleSession />)} />
       <Route path="/sessions/:id" element={studentTutorShell(<SessionDetails />)} />
 
-      <Route path="/reports" element={shell(['faculty', 'admin'], <Reports />)} />
+      <Route path="/reports" element={shell(['admin'], <Reports />)} />
       <Route path="/admin/verifications" element={shell(['admin'], <TutorVerifications />)} />
       <Route path="/admin/users" element={shell(['admin'], <UserManagement />)} />
       <Route path="/admin/sessions" element={shell(['admin'], <AdminSessions />)} />
@@ -105,5 +107,6 @@ export default function App() {
 
       <Route path="*" element={<Landing />} />
     </Routes>
+    </StripeProvider>
   );
 }

@@ -4,7 +4,7 @@ import { getToken, setToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
-const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', faculty: 'Faculty', admin: 'Administrator' };
+const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', admin: 'Administrator' };
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

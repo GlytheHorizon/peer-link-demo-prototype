@@ -22,7 +22,9 @@ export const userService = {
   acknowledgeWarning: (id) => apiFetch(`/users/warnings/${id}/acknowledge`, { method: 'POST', body: {} }),
   changeName: (payload) => apiFetch('/users/me/name', { method: 'PATCH', body: payload }),
   changeEmail: (payload) => apiFetch('/users/me/email', { method: 'PATCH', body: payload }),
-  changePassword: (payload) => apiFetch('/users/me/password', { method: 'PATCH', body: payload })
+  changePassword: (payload) => apiFetch('/users/me/password', { method: 'PATCH', body: payload }),
+  uploadProfilePicture: (payload) => apiFetch('/users/me/profile-picture', { method: 'POST', body: payload }),
+  removeProfilePicture: () => apiFetch('/users/me/profile-picture', { method: 'DELETE' })
 };
 
 export const studentService = {
@@ -105,6 +107,21 @@ export const sessionService = {
 
 export const paymentService = {
   mine: () => apiFetch('/payments/mine')
+};
+
+export const stripeService = {
+  /** Attach a Stripe Payment Method ID to the current user and save locally. */
+  attachPaymentMethod: (paymentMethodId) =>
+    apiFetch('/stripe/payment-method', { method: 'POST', body: { payment_method_id: paymentMethodId } }),
+  saved: () => apiFetch('/stripe/saved'),
+  setDefaultPaymentMethod: (id) =>
+    apiFetch('/stripe/payment-method', { method: 'PATCH', body: { id, set_default: true } }),
+  removePaymentMethod: (id) =>
+    apiFetch(`/stripe/payment-method/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Tutor payout account (the account number earnings are sent to). */
+  payoutAccount: () => apiFetch('/stripe/payout-account'),
+  savePayoutAccount: (payload) => apiFetch('/stripe/payout-account', { method: 'PUT', body: payload }),
+  removePayoutAccount: () => apiFetch('/stripe/payout-account', { method: 'DELETE' })
 };
 
 export const evaluationService = {

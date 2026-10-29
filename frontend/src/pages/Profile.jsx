@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { studentService, tutorService, subjectService, userService } from '../services';
-import { Spinner, Alert, Modal, RatingStars } from '../components/ui';
+import { Spinner, Alert, Modal, RatingStars, Avatar } from '../components/ui';
 import {
   STRANDS, STRAND_LABELS, GRADE_LEVELS, LEARNING_MODES, SCHEDULE_OPTIONS, TIME_OPTIONS
 } from '../constants/learningProfile';
@@ -15,10 +15,6 @@ const TAG_OPTIONS = [
   'Exam Prep', 'Beginner Friendly', 'Advanced Topics', 'Project Help',
   'Speaks English & Filipino', 'Quick Replies'
 ];
-
-const initialsOf = (name) => (
-  (name || '?').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-);
 
 const modeLabel = (v) => (LEARNING_MODES.find((m) => m.value === v)?.label) || v;
 const strandLabel = (v) => (v ? (STRAND_LABELS[v] || v) : null);
@@ -59,7 +55,7 @@ function ProfileHeaderCard({ profile, nameChangesCount, onEdit, onNameSave }) {
 
   return (
     <div className="profile-header">
-      <div className="profile-avatar" aria-hidden="true">{initialsOf(profile.full_name)}</div>
+      <Avatar name={profile.full_name} src={profile.profile_picture} className="profile-avatar" />
       <div className="profile-identity">
         {editing ? (
           <div className="profile-name-edit">
@@ -114,6 +110,102 @@ function ProfileHeaderCard({ profile, nameChangesCount, onEdit, onNameSave }) {
         )}
       </div>
       <button type="button" className="btn btn-primary profile-edit-btn" onClick={onEdit}>Edit Profile</button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Profile photo editor (shown inside Edit Profile)                    */
+/* ------------------------------------------------------------------ */
+function ProfilePhotoEditor({ profile, onSaved }) {
+  const confirm = useConfirm();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  const choosePhoto = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setNotice(null);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Use a JPG, PNG, or WEBP image');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image must be 2 MB or smaller');
+      return;
+    }
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const ok = await confirm({
+        title: 'Confirm profile photo',
+        message: 'Use this image as your profile picture?',
+        preview: reader.result,
+        confirmText: 'Use photo',
+        cancelText: 'Choose another'
+      });
+      if (!ok) return;
+      setBusy(true);
+      const res = await userService.uploadProfilePicture({ file_name: file.name, data: reader.result });
+      setBusy(false);
+      if (res.ok) {
+        setNotice(res.message);
+        onSaved(res.data.profile_picture, res.message);
+      } else setError(res.message);
+    };
+    reader.onerror = () => setError('Could not read that image');
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = async () => {
+    const ok = await confirm({
+      title: 'Remove profile picture?',
+      message: 'Your initials will be shown instead.',
+      confirmText: 'Remove photo',
+      danger: true
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await userService.removeProfilePicture();
+    setBusy(false);
+    if (res.ok) {
+      setNotice(res.message);
+      onSaved(null, res.message);
+    } else setError(res.message);
+  };
+
+  return (
+    <div className="profile-photo-editor">
+      <h5 className="form-section-title">Profile photo</h5>
+      <div className="profile-photo-editor-row">
+        <Avatar name={profile.full_name} src={profile.profile_picture} className="profile-photo-avatar" />
+        <div className="profile-photo-editor-copy">
+          <div className="profile-photo-editor-actions">
+            <label className={`btn btn-ghost btn-sm profile-photo-btn${busy ? ' disabled' : ''}`}>
+              {busy ? 'Uploading…' : profile.profile_picture ? 'Change photo' : 'Add photo'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={choosePhoto}
+                disabled={busy}
+                hidden
+              />
+            </label>
+            {profile.profile_picture && !busy && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={removePhoto}>
+                Remove photo
+              </button>
+            )}
+          </div>
+          <p className="muted small profile-photo-hint">JPG, PNG, or WEBP · up to 2 MB</p>
+          {notice && <p className="profile-photo-success">{notice}</p>}
+          {error && <p className="profile-photo-error">{error}</p>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -409,6 +501,12 @@ function StudentProfile() {
     else setErr(res.message);
   };
 
+  const handleAvatarSave = (profilePicture, message) => {
+    setProfile((p) => ({ ...p, profile_picture: profilePicture }));
+    setMsg({ type: 'success', text: message });
+    if (refreshUser) refreshUser();
+  };
+
   if (loading) return <Spinner />;
   if (err && !profile) return <Alert type="error">{err}</Alert>;
   if (!profile) return <Alert type="error">Student profile not found.</Alert>;
@@ -459,6 +557,7 @@ function StudentProfile() {
       {editing && (
         <Modal title="Edit Profile" className="profile-modal" onClose={() => setEditing(false)}>
           <form className="form" onSubmit={submit}>
+            <ProfilePhotoEditor profile={profile} onSaved={handleAvatarSave} />
             <PersonalInfoFields profile={profile} />
             <h5 className="form-section-title">Learning preferences</h5>
             <label>Year level</label>
@@ -647,6 +746,12 @@ function TutorProfile() {
     else setErr(res.message);
   };
 
+  const handleAvatarSave = (profilePicture, message) => {
+    setProfile((p) => ({ ...p, profile_picture: profilePicture }));
+    setMsg({ type: 'success', text: message });
+    if (refreshUser) refreshUser();
+  };
+
   if (!profile && !err) return <Spinner />;
   if (err && !profile) return <Alert type="error">{err}</Alert>;
 
@@ -713,6 +818,7 @@ function TutorProfile() {
       {editing && (
         <Modal title="Edit Profile" className="profile-modal" onClose={() => setEditing(false)}>
           <form className="form" onSubmit={submit}>
+            <ProfilePhotoEditor profile={profile} onSaved={handleAvatarSave} />
             <PersonalInfoFields profile={profile} />
             <h5 className="form-section-title">Tutoring settings</h5>
             <div className="grid-2">
@@ -851,7 +957,7 @@ export default function Profile() {
         <input value={user.email} disabled />
         <label>Role</label>
         <input value={user.role} disabled />
-        <p className="muted small">Faculty and administrator account details are managed by an administrator.</p>
+        <p className="muted small">Administrator account details are managed by an administrator.</p>
       </div>
     </div>
   );

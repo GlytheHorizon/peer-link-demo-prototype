@@ -4,7 +4,6 @@
 -- 1. Wipes ALL rows from every table
 -- 2. Seeds ONLY the demo accounts with preset profiles:
 --      Admin   : admin@peerlink.edu     (Admin@123)
---      Faculty : faculty@peerlink.edu   (Faculty@123)
 --      Tutors  : maria@peerlink.edu     (Tutor@123)
 --                gerome@peerlink.edu    (Tutor@123)
 --                kiel@peerlink.edu      (Tutor@123)
@@ -42,11 +41,10 @@ TRUNCATE TABLE users;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ------------------------------------------------------------
--- USERS (7 demo accounts — passwords Tutor@123 / Student@123 / Admin@123 / Faculty@123)
+-- USERS (6 demo accounts — passwords Tutor@123 / Student@123 / Admin@123)
 -- ------------------------------------------------------------
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, is_active) VALUES
 (1, 'admin@peerlink.edu',     '$2a$10$vvDNXhEYATRXuM6NXzQW.eweNMp6/DT4iri5L6FyLcQG3ZUHzijgi', 'Alex',    'Admin',    'admin',   1),
-(2, 'faculty@peerlink.edu',   '$2a$10$JDusT272YLpZvBJ/CRJM0u0NnxGraIk0QqtNtms78LYSJzTipY56i', 'Dana',    'Faculty',  'faculty', 1),
 (3, 'maria@peerlink.edu',     '$2a$10$oqZpYzmn5EjTMD0mpfSbk.3YFAsP3MU.zcgnc8ozv2P8qMKam7h5u', 'Maria',   'Tutor',    'tutor',   1),
 (4, 'student@peerlink.edu',   '$2a$10$sxsfR9PejLT4wmo1A6i2Uer0XPVLGpd2RGZD6ptBm2lB9HBQ8Vt8K', 'Juswa',   'Student',  'student', 1),
 (5, 'gerome@peerlink.edu',    '$2a$10$oqZpYzmn5EjTMD0mpfSbk.3YFAsP3MU.zcgnc8ozv2P8qMKam7h5u', 'Gerome',  'Sanchez',  'tutor',   1),

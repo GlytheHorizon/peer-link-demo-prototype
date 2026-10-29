@@ -9,15 +9,29 @@ const conversationPaymentModel = require('../models/conversationPaymentModel');
 const rescheduleRequestModel = require('../models/rescheduleRequestModel');
 const messageModel = require('../models/messageModel');
 const log = require('../services/activityLogService').log;
+const { generateJitsiRoomName } = require('../utils/jitsi');
+const stripeCharges = require('../services/stripeCharges');
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
 const MAX_DURATION_MS = 4 * 60 * 60 * 1000;
 const RATE_PER_HOUR = 100;
-const PAY_METHODS = ['gcash', 'maya', 'bank_card'];
+const ALLOWED_METHODS = ['stripe']; // Stripe is the only supported payment method
+
+/**
+ * Session DATETIME columns are stored as naive UTC strings ("YYYY-MM-DD HH:MM:SS",
+ * written via `toISOString().slice(0, 19)`). Parse them as UTC instants so time math
+ * (durations, overlap checks, reschedule) uses the real schedule times.
+ */
+const parseUtc = (v) => {
+  const s = String(v).trim();
+  const normalized = /^\d{4}-\d{2}-\d{2}T/.test(s) ? s : `${s.replace(' ', 'T')}Z`;
+  return new Date(normalized);
+};
+const toUtcNaive = (v) => parseUtc(v).toISOString().slice(0, 19).replace('T', ' ');
 
 /** GET /api/sessions — my sessions (student or tutor roles). */
 const listMine = asyncHandler(async (req, res) => {
-  const sessions = req.user.role === 'tutor' || req.user.role === 'faculty'
+  const sessions = req.user.role === 'tutor'
     ? await sessionModel.listForTutor(req.user.id)
     : await sessionModel.listForStudent(req.user.id);
   ok(res, 200, sessions);
@@ -70,8 +84,8 @@ const createRequest = asyncHandler(async (req, res) => {
     learning_mode: [v.isIn(['online', 'face-to-face', 'both'])]
   }, req.body);
 
-  const start = new Date(scheduled_start);
-  const end = new Date(scheduled_end);
+  const start = parseUtc(scheduled_start);
+  const end = parseUtc(scheduled_end);
   if (end.getTime() - start.getTime() < MIN_DURATION_MS) throw new ApiError(400, 'Sessions must be at least 15 minutes long');
   if (end.getTime() - start.getTime() > MAX_DURATION_MS) throw new ApiError(400, 'Sessions cannot exceed 4 hours');
   if (start.getTime() <= Date.now()) throw new ApiError(400, 'Sessions must be scheduled in the future');
@@ -133,8 +147,8 @@ const respond = asyncHandler(async (req, res) => {
   if (session.status !== 'pending') throw new ApiError(409, `Session is already ${session.status}`);
 
   if (decision === 'accepted') {
-    const startIso = new Date(session.scheduled_start).toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = new Date(session.scheduled_end).toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = toUtcNaive(session.scheduled_start);
+    const endIso = toUtcNaive(session.scheduled_end);
     if (await sessionModel.hasOverlap({ userId: req.user.id, start: startIso, end: endIso, excludeSessionId: session.id })) {
       throw new ApiError(409, 'You have an overlapping session at that time; reject or cancel it first');
     }
@@ -164,8 +178,8 @@ async function addCompletionMessage(conversationId) {
 
 /** "Sep 12 · 2:00 PM – 3:00 PM" style schedule label for system messages. */
 function fmtSchedule(start, end) {
-  const st = new Date(start);
-  const en = new Date(end);
+  const st = parseUtc(start);
+  const en = parseUtc(end);
   const date = st.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
   const t1 = st.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
   const t2 = en.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
@@ -222,10 +236,8 @@ const confirmComplete = asyncHandler(async (req, res) => {
     : 'Completion confirmed — waiting for the other participant to confirm');
 });
 
-/** PATCH /api/sessions/:id/cancel — student or tutor cancels a non-completed session.
- *  The student may only cancel within 5 minutes of booking (free-cancel window). */
+/** PATCH /api/sessions/:id/cancel — student or tutor cancels a non-completed, unpaid session at any time. */
 const cancel = asyncHandler(async (req, res) => {
-  const SESSION_CANCEL_WINDOW_MS = 5 * 60 * 1000;
   const { reason } = req.body;
   validate({ reason: [v.maxLen(300)] }, req.body);
 
@@ -239,12 +251,6 @@ const cancel = asyncHandler(async (req, res) => {
   }
   if (session.payment_id || session.pending_payment_id) {
     throw new ApiError(409, 'This session has already been paid — it can no longer be cancelled. End it by confirming completion instead.');
-  }
-  if (req.user.id === session.student_id) {
-    const windowMs = new Date(session.created_at).getTime() + SESSION_CANCEL_WINDOW_MS - Date.now();
-    if (windowMs <= 0) {
-      throw new ApiError(409, 'The 5-minute free-cancel window has expired — you can no longer cancel this session');
-    }
   }
   const reasonText = reason != null ? String(reason).trim().slice(0, 300) || null : null;
   await sessionModel.cancel(session.id, reasonText);
@@ -277,13 +283,13 @@ const reschedule = asyncHandler(async (req, res) => {
     throw new ApiError(409, 'A reschedule request is already pending for this session');
   }
 
-  const start = new Date(scheduled_start);
-  const end = new Date(scheduled_end);
+  const start = parseUtc(scheduled_start);
+  const end = parseUtc(scheduled_end);
   if (end.getTime() - start.getTime() < MIN_DURATION_MS) throw new ApiError(400, 'Sessions must be at least 15 minutes long');
   if (end.getTime() - start.getTime() > MAX_DURATION_MS) throw new ApiError(400, 'Sessions cannot exceed 4 hours');
   if (start.getTime() <= Date.now()) throw new ApiError(400, 'Sessions must be scheduled in the future');
 
-  const originalDuration = new Date(session.scheduled_end).getTime() - new Date(session.scheduled_start).getTime();
+  const originalDuration = parseUtc(session.scheduled_end).getTime() - parseUtc(session.scheduled_start).getTime();
   if (Math.abs(end.getTime() - start.getTime() - originalDuration) > 60 * 1000) {
     throw new ApiError(400, 'Reschedules must keep the same duration as the paid schedule — no more, no less');
   }
@@ -339,16 +345,16 @@ const respondRescheduleRequest = asyncHandler(async (req, res) => {
   }
 
   if (decision === 'accepted') {
-    if (new Date(request.proposed_start).getTime() <= Date.now()) {
+    if (parseUtc(request.proposed_start).getTime() <= Date.now()) {
       throw new ApiError(400, 'The proposed time has already passed — ask for a new reschedule');
     }
-    const originalDuration = new Date(session.scheduled_end).getTime() - new Date(session.scheduled_start).getTime();
-    const proposedDuration = new Date(request.proposed_end).getTime() - new Date(request.proposed_start).getTime();
+    const originalDuration = parseUtc(session.scheduled_end).getTime() - parseUtc(session.scheduled_start).getTime();
+    const proposedDuration = parseUtc(request.proposed_end).getTime() - parseUtc(request.proposed_start).getTime();
     if (Math.abs(proposedDuration - originalDuration) > 60 * 1000) {
       throw new ApiError(400, 'The proposed reschedule does not match the paid duration — ask for a new reschedule');
     }
-    const startIso = new Date(request.proposed_start).toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = new Date(request.proposed_end).toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = toUtcNaive(request.proposed_start);
+    const endIso = toUtcNaive(request.proposed_end);
     if (await sessionModel.hasOverlap({ userId: session.student_id, start: startIso, end: endIso, excludeSessionId: session.id })) {
       throw new ApiError(409, 'The new schedule conflicts with the student\'s other sessions');
     }
@@ -360,8 +366,8 @@ const respondRescheduleRequest = asyncHandler(async (req, res) => {
   await rescheduleRequestModel.setStatus(request.id, decision);
 
   if (decision === 'accepted') {
-    const startIso = new Date(request.proposed_start).toISOString().slice(0, 19).replace('T', ' ');
-    const endIso = new Date(request.proposed_end).toISOString().slice(0, 19).replace('T', ' ');
+    const startIso = toUtcNaive(request.proposed_start);
+    const endIso = toUtcNaive(request.proposed_end);
     await sessionModel.updateSchedule(session.id, startIso, endIso);
   }
 
@@ -391,8 +397,8 @@ const deleteRequest = asyncHandler(async (req, res) => {
 const pay = asyncHandler(async (req, res) => {
   if (req.user.role !== 'student') throw new ApiError(403, 'Only students can pay for sessions');
 
-  const { method, scheduled_start, scheduled_end, learning_mode } = req.body;
-  validate({ method: [v.required('method'), v.isIn(PAY_METHODS)] }, req.body);
+  const { method, stripe_payment_method_id, scheduled_start, scheduled_end, learning_mode } = req.body;
+  validate({ method: [v.required('method'), v.isIn(ALLOWED_METHODS)] }, req.body);
   if (learning_mode !== undefined && learning_mode !== null && learning_mode !== '') {
     validate({ learning_mode: [v.isIn(['online', 'face-to-face', 'both'])] }, { learning_mode });
   }
@@ -415,8 +421,8 @@ const pay = asyncHandler(async (req, res) => {
     }
   }
 
-  let start = new Date(session.scheduled_start);
-  let end = new Date(session.scheduled_end);
+  let start = parseUtc(session.scheduled_start);
+  let end = parseUtc(session.scheduled_end);
 
   if (scheduled_start !== undefined || scheduled_end !== undefined) {
     validate({
@@ -424,8 +430,8 @@ const pay = asyncHandler(async (req, res) => {
       scheduled_end: [v.required('scheduled_end'), v.date('end')]
     }, req.body);
 
-    start = new Date(scheduled_start);
-    end = new Date(scheduled_end);
+    start = parseUtc(scheduled_start);
+    end = parseUtc(scheduled_end);
     if (end.getTime() - start.getTime() < MIN_DURATION_MS) throw new ApiError(400, 'Sessions must be at least 15 minutes long');
     if (end.getTime() - start.getTime() > MAX_DURATION_MS) throw new ApiError(400, 'Sessions cannot exceed 4 hours');
     if (start.getTime() <= Date.now()) throw new ApiError(400, 'Sessions must be scheduled in the future');
@@ -447,6 +453,26 @@ const pay = asyncHandler(async (req, res) => {
 
   if (learning_mode) await sessionModel.updateLearningMode(session.id, learning_mode);
 
+  // Card payments are real Stripe charges on the platform account (USD,
+  // converted from the PHP session amount). Other methods stay local records.
+  let charge = null;
+  if (method === 'stripe') {
+    if (!stripe_payment_method_id) {
+      throw new ApiError(400, 'A Stripe card is required to pay for this session');
+    }
+    charge = await stripeCharges.chargeCard({
+      paymentMethodId: stripe_payment_method_id,
+      amountPhp: amount,
+      description: `PeerLink session #${session.id} — ${session.subject_name || 'tutoring'}`,
+      metadata: {
+        session_id: String(session.id),
+        student_user_id: String(req.user.id),
+        tutor_user_id: String(session.tutor_id),
+        conversation_id: session.conversation_id ? String(session.conversation_id) : ''
+      }
+    });
+  }
+
   let payment;
   let message = 'Payment recorded — your session is confirmed';
   if (session.conversation_id) {
@@ -456,13 +482,39 @@ const pay = asyncHandler(async (req, res) => {
       studentId: req.user.id,
       tutorId: session.tutor_id,
       amount,
-      reference: `Session payment via ${method}`
+      reference: `Session payment via ${method}${stripe_payment_method_id ? ` (${stripe_payment_method_id})` : ''}`,
+      stripePaymentIntentId: charge?.paymentIntentId || null,
+      chargedAmountUsd: charge?.amountUsd || null,
+      chargedCurrency: charge?.currency || null,
+      fxRate: charge?.fxRate || null
     });
     message = 'Payment sent — waiting for the tutor to confirm in your conversation';
   } else {
-    payment = await paymentModel.create({ sessionId: session.id, studentId: req.user.id, method, amount });
+    payment = await paymentModel.create({
+      sessionId: session.id,
+      studentId: req.user.id,
+      method,
+      amount,
+      stripePaymentMethodId: stripe_payment_method_id || null,
+      stripePaymentIntentId: charge?.paymentIntentId || null,
+      chargedAmountUsd: charge?.amountUsd || null,
+      chargedCurrency: charge?.currency || null,
+      fxRate: charge?.fxRate || null
+    });
+    // For direct payments (no tutor confirmation step), generate room now.
+    const finalMode = learning_mode || session.learning_mode;
+    if (!session.jitsi_room_name && (finalMode === 'online' || finalMode === 'both')) {
+      const roomName = generateJitsiRoomName(session.id);
+      await sessionModel.setJitsiRoom(session.id, roomName);
+    }
   }
-  log(req, 'session.pay', 'session', session.id, { method, amount });
+  log(req, 'session.pay', 'session', session.id, {
+    method,
+    stripe_payment_method_id,
+    stripe_payment_intent_id: charge?.paymentIntentId || null,
+    charged_amount_usd: charge?.amountUsd || null,
+    amount
+  });
   ok(res, 201, payment, message);
 });
 

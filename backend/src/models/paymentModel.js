@@ -10,11 +10,19 @@ async function findBySessionId(sessionId) {
   return rows[0] || null;
 }
 
-async function create({ sessionId, studentId, method, amount }) {
+async function create({
+  sessionId, studentId, method, amount, stripePaymentMethodId, stripePaymentIntentId,
+  chargedAmountUsd, chargedCurrency, fxRate
+}) {
   const result = await query(
-    `INSERT INTO payments (session_id, student_id, method, amount, status)
-     VALUES (?, ?, ?, ?, 'paid')`,
-    [sessionId, studentId, method, amount]
+    `INSERT INTO payments
+       (session_id, student_id, method, stripe_payment_method_id, stripe_payment_intent_id,
+        amount, charged_amount_usd, charged_currency, fx_rate, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid')`,
+    [
+      sessionId, studentId, method || 'stripe', stripePaymentMethodId || null, stripePaymentIntentId || null,
+      amount, chargedAmountUsd || null, chargedCurrency || null, fxRate || null
+    ]
   );
   return findById(result.insertId);
 }

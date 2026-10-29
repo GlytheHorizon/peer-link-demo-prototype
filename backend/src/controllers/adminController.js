@@ -16,7 +16,7 @@ const listUsers = asyncHandler(async (req, res) => {
   ok(res, 200, data);
 });
 
-/** POST /api/admin/users — create any user including faculty/admin (admin only). */
+/** POST /api/admin/users — create any user including admins (admin only). */
 const createUser = asyncHandler(async (req, res) => {
   const { email, password, first_name, last_name, role, year_level, course } = req.body;
   validate({
@@ -24,7 +24,7 @@ const createUser = asyncHandler(async (req, res) => {
     password: [v.required('password'), v.minLen(8, 'min 8 characters')],
     first_name: [v.required('first_name'), v.maxLen(100)],
     last_name: [v.required('last_name'), v.maxLen(100)],
-    role: [v.required('role'), v.isIn(['student', 'tutor', 'faculty', 'admin'])]
+    role: [v.required('role'), v.isIn(['student', 'tutor', 'admin'])]
   }, req.body);
 
   if (await userModel.findByEmail(email)) throw new ApiError(409, 'An account with this email already exists');

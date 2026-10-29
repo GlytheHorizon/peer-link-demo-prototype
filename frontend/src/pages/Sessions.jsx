@@ -3,16 +3,17 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
+import { useStripe } from '../context/StripeContext';
 import { sessionService, conversationService } from '../services';
-import { Spinner, Alert, EmptyState, Modal } from '../components/ui';
+import { asDate, fmtTime, fmtRange, fmtDateTime, dayTag } from '../utils/datetime';
+import { Spinner, Alert, EmptyState, Modal, Avatar } from '../components/ui';
 import RescheduleModal from '../components/RescheduleModal';
-import CancelSessionModal, { useCancelWindow, CancelCountdown } from '../components/CancelSessionModal';
+import CancelSessionModal from '../components/CancelSessionModal';
+import JitsiMeetModal from '../components/JitsiMeetModal';
 
 const RATE_PER_HOUR = 100;
 const PAY_METHODS = [
-  { key: 'gcash', label: 'GCash', hint: 'Pay with your GCash wallet' },
-  { key: 'maya', label: 'Maya', hint: 'Pay with your Maya wallet' },
-  { key: 'bank_card', label: 'Bank Card', hint: 'Credit or debit card' }
+  { key: 'stripe', label: 'Stripe Card', hint: 'Credit or debit card via Stripe (test mode)' }
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -21,6 +22,7 @@ const toTimeInput = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
 const MAX_DURATION_MS = 4 * 60 * 60 * 1000;
+const DEFAULT_SESSION_MINUTES = 30; // default scheduled duration when a student opens the pay modal
 
 const fmtDuration = (ms) => {
   const totalMin = Math.round(ms / 60000);
@@ -29,23 +31,6 @@ const fmtDuration = (ms) => {
   if (h && m) return `${h} hr${h > 1 ? 's' : ''} ${m} min`;
   if (h) return `${h} hr${h > 1 ? 's' : ''}`;
   return `${m} min`;
-};
-
-const asDate = (v) => (v instanceof Date ? v : new Date(v));
-
-const fmtTime = (d) => asDate(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-const fmtRange = (start, end) => `${fmtTime(start)} - ${fmtTime(end)}`;
-const fmtDateTime = (d) => asDate(d).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
-
-const dayTag = (d) => {
-  const day = asDate(d);
-  day.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.round((day - today) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  return day.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
 const STAT_LABELS = {
@@ -63,6 +48,10 @@ const STATUS_META = {
   rejected: { label: 'Rejected', cls: 'pill--cancelled' }
 };
 
+/** Date/time is only final after the tutor confirms the student's payment. */
+const hasConfirmedSchedule = (s) =>
+  !!s.payment_id && (s.status === 'accepted' || s.status === 'completed');
+
 const LEARNING_MODES = [
   { value: 'online', label: 'Online', hint: 'Virtual session via meeting link' },
   { value: 'face-to-face', label: 'Face-to-face', hint: 'In-person meeting' },
@@ -77,10 +66,40 @@ const LEARNING_MODE_LABELS = {
 
 const modeLabel = (m) => LEARNING_MODE_LABELS[m] || '—';
 
-const initialsOf = (name) => {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-  return parts.slice(0, 2).map((p) => (p[0] || '').toUpperCase()).join('') || '?';
+/**
+ * True when the session can be joined via Jitsi:
+ *   - learning_mode is 'online' or 'both'
+ *   - payment is confirmed (payment_id present)
+ *   - session has a jitsi_room_name
+ *   - now is within the joinable window: 15 min before start → 30 min after end
+ */
+const isJoinable = (s, now = new Date()) => {
+  if (!s.jitsi_room_name) return false;
+  if (s.learning_mode !== 'online' && s.learning_mode !== 'both') return false;
+  if (!s.payment_id) return false;
+  if (s.status !== 'accepted') return false;
+  const start = asDate(s.scheduled_start).getTime();
+  const end   = asDate(s.scheduled_end).getTime();
+  const t = now.getTime();
+  return t >= start - 15 * 60 * 1000 && t <= end + 30 * 60 * 1000;
 };
+
+/** True when the session is happening RIGHT NOW (between start and end). */
+const isLive = (s, now = new Date()) => {
+  if (!s.jitsi_room_name) return false;
+  const t = now.getTime();
+  return t >= asDate(s.scheduled_start).getTime() && t <= asDate(s.scheduled_end).getTime();
+};
+
+/** Video camera icon for the Join button */
+function VideoIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polygon points="23 7 16 12 23 17 23 7" />
+      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+    </svg>
+  );
+}
 
 function ChatIconButton({ onClick, label }) {
   return (
@@ -103,7 +122,9 @@ function TutorSessionCard({
   onDeclineReschedule,
   onConfirmPayment,
   hasPendingReq,
-  myRequest
+  myRequest,
+  onJoin,
+  now
 }) {
   const meta = STATUS_META[s.status] || { label: s.status, cls: '' };
   const statusLabel = s.status === 'accepted' && s.payment_id ? 'Confirmed' : meta.label;
@@ -113,21 +134,24 @@ function TutorSessionCard({
   const rating = s.evaluation_rating != null ? Number(s.evaluation_rating).toFixed(1) : null;
   const dateLabel = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeLabel = `${fmtTime(start)} – ${fmtTime(end)}`;
+  const canJoin = isJoinable(s, now);
+  const live    = isLive(s, now);
 
   return (
     <div className="session-card tutor-card" key={s.id}>
-      <span className="mini-avatar sc-avatar" aria-hidden="true">{initialsOf(s.student_name)}</span>
+      <Avatar name={s.student_name} src={s.student_picture} className="mini-avatar sc-avatar" />
       <div className="sc-main">
         <div className="sc-top">
           <Link className="sc-name" to={`/students/${s.student_id}`}>{s.student_name}</Link>
           <span className={`pill ${meta.cls}`}>{statusLabel}</span>
+          {live && <span className="pill pill--live">● Live</span>}
           {s.learning_mode && <span className="pill pill--neutral">Learning: {modeLabel(s.learning_mode)}</span>}
           {s.status === 'accepted' && s.pending_payment_id && !s.payment_id && (
             <span className="pill pill--pending">Payment request</span>
           )}
           {s.status === 'completed' && rating && <span className="sc-rating">★ {rating}</span>}
         </div>
-        <div className="sc-sub">{dateLabel} · {timeLabel}</div>
+        {hasConfirmedSchedule(s) && <div className="sc-sub">{dateLabel} · {timeLabel}</div>}
 
         {s.status === 'accepted' && s.rejected_payment_id && !s.payment_id && (
           <p className="sc-note sc-note--red payment-rejection-note">
@@ -179,6 +203,12 @@ function TutorSessionCard({
                   <button className="action-btn action-btn--cancel" onClick={() => onDeclineReschedule(s)}>Decline</button>
                 </>
               )}
+              {canJoin && (
+                <button className="action-btn action-btn--video" onClick={() => onJoin(s)}>
+                  <VideoIcon />
+                  {live ? 'Join Live Session' : 'Join Video Session'}
+                </button>
+              )}
               <button className="action-btn action-btn--solid" onClick={() => onChat(s)}>Chat</button>
               {!s.payment_id && (
                 <button className="action-btn action-btn--outline-danger" onClick={() => onCancel(s)}>Cancel</button>
@@ -196,11 +226,18 @@ function TutorSessionCard({
 function PayModal({ session, onClose, onPaid }) {
   const start = asDate(session.scheduled_start);
   const end = asDate(session.scheduled_end);
-  const [method, setMethod] = useState('gcash');
+  const { stripe, stripeReady } = useStripe();
+  const containerRef = useRef(null);
+  const cardRef = useRef(null);
+  const mountedRef = useRef(false);
+  const [method, setMethod] = useState('stripe');
   const [learningMode, setLearningMode] = useState(session.learning_mode || 'online');
-  const [date, setDate] = useState(toDateInput(start));
-  const [startTime, setStartTime] = useState(toTimeInput(start));
-  const [endTime, setEndTime] = useState(toTimeInput(end));
+  const [mounted, setMounted] = useState(false);
+  const [stripeError, setStripeError] = useState(null);
+  const [submitError, setSubmitError] = useState(null);
+  const [date, setDate] = useState(toDateInput(new Date()));
+  const [startTime, setStartTime] = useState(toTimeInput(new Date()));
+  const [endTime, setEndTime] = useState(toTimeInput(new Date(Date.now() + DEFAULT_SESSION_MINUTES * 60 * 1000)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [done, setDone] = useState(false);
@@ -242,38 +279,86 @@ function PayModal({ session, onClose, onPaid }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, startTime, endTime, scheduleOk]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    if (!stripe || !stripeReady) { setMounted(false); return undefined; }
+
+    let card = null;
+    try {
+      const elements = stripe.elements();
+      card = elements.create('card', {
+        style: {
+          base: {
+            fontSize: '15px',
+            fontFamily: 'inherit',
+            color: '#1f1e33',
+            '::placeholder': { color: '#5c5b73' }
+          },
+          invalid: { color: '#c23c3c' }
+        }
+      });
+      cardRef.current = card;
+      if (containerRef.current) {
+        card.mount(containerRef.current);
+        setMounted(true);
+      }
+    } catch (err) {
+      setStripeError(err && err.message ? err.message : 'Could not initialize the card field');
+      setMounted(false);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      try { if (card) card.destroy(); } catch { /* element already gone */ }
+      cardRef.current = null;
+      setMounted(false);
+    };
+  }, [stripe, stripeReady]);
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!scheduleOk) {
-      setErr('Pick a date and an end time that comes after the start time');
-      return;
-    }
+    if (!scheduleOk) { setSubmitError('Pick a date and an end time that comes after the start time'); return; }
     if (conflict?.conflict) {
-      setErr(conflict.mine
+      setSubmitError(conflict.mine
         ? 'This time conflicts with one of your existing sessions — pick a different time'
         : 'The tutor is already booked at this time — pick a different time');
       return;
     }
+    if (!stripe || !cardRef.current || !mountedRef.current) { setSubmitError('Card form is not ready yet'); return; }
+
     setBusy(true);
-    setErr(null);
+    setSubmitError(null);
+
+    const { error: confirmError, paymentMethod } = await stripe.createPaymentMethod({
+      type: 'card',
+      card: cardRef.current
+    });
+
+    if (confirmError) {
+      setBusy(false);
+      setSubmitError(confirmError.message || 'Could not read card details');
+      return;
+    }
+
     const res = await sessionService.pay(session.id, {
-      method,
+      method: 'stripe',
+      stripe_payment_method_id: paymentMethod.id,
       learning_mode: learningMode,
       scheduled_start: pickedStart.toISOString(),
       scheduled_end: pickedEnd.toISOString()
     });
     setBusy(false);
-    if (res.ok) {
-      setDone(true);
-      onPaid(res.data);
-    } else setErr(res.message);
+    if (res.ok) { setDone(true); onPaid(res.data); }
+    else setSubmitError(res.message);
   };
 
   return (
     <Modal title="Pay Session" onClose={onClose}>
-      {done ? (
-        <div>
-          <Alert type="success">Payment sent — waiting for the tutor to confirm it in your conversation.</Alert>
+      {done ? (            <div>
+              <Alert type="success">
+                Payment sent — the charge went through in USD. {session.tutor_name} still needs to confirm it in your
+                conversation.
+              </Alert>
           <div className="row-actions" style={{ marginTop: 14 }}>
             <button className="btn btn-primary" onClick={onClose}>Done</button>
           </div>
@@ -341,23 +426,22 @@ function PayModal({ session, onClose, onPaid }) {
           )}
 
           <label className="pay-method-label">Mode of Payment</label>
-          <div className="pay-methods">
-            {PAY_METHODS.map((m) => (
-              <label key={m.key} className={`pay-method ${method === m.key ? 'on' : ''}`}>
-                <input
-                  type="radio"
-                  name="pay-method"
-                  value={m.key}
-                  checked={method === m.key}
-                  onChange={() => setMethod(m.key)}
-                />
-                <span className="pay-method-name">{m.label}</span>
-                <span className="pay-method-hint">{m.hint}</span>
-              </label>
-            ))}
-          </div>
+          <p className="muted small" style={{ margin: '6px 0' }}>
+            Stripe card is the only payment method used for sessions. Your card is charged ₱{amount == null ? '—' : amount},
+            converted to USD at the current rate and collected in PeerLink&apos;s Stripe account. Test mode charges test
+            cards only, so no real money moves.
+          </p>
+          <div
+            ref={containerRef}
+            className="stripe-card-element"
+            style={{ minHeight: 44 }}
+          />
+          {!mounted && stripeReady && (
+            <p className="muted small" style={{ margin: 0 }}>Preparing card input…</p>
+          )}
+          {stripeError && <Alert type="error">{stripeError}</Alert>}
 
-          {err && <Alert type="error">{err}</Alert>}
+          {submitError && <Alert type="error">{submitError}</Alert>}
           <div className="row-actions" style={{ marginTop: 16 }}>
             <button className="btn btn-primary" disabled={busy || !scheduleOk || tooLong || !!conflict?.conflict}>
               {busy ? 'Processing payment…' : `Send Payment (₱${amount == null ? '—' : amount})`}
@@ -370,17 +454,12 @@ function PayModal({ session, onClose, onPaid }) {
   );
 }
 
-/** Student cancel control: only lives for the 5-minute free-cancel window, then disappears. */
-function StudentCancel({ session, onCancel }) {
-  const { active } = useCancelWindow(session);
-  if (!active) return null;
+/** Student cancel control: available at any time while the session is unpaid. */
+function StudentCancel({ onCancel }) {
   return (
-    <>
-      <CancelCountdown session={session} />
-      <button className="action-btn action-btn--cancel" onClick={onCancel}>
-        Cancel Session
-      </button>
-    </>
+    <button className="action-btn action-btn--cancel" onClick={onCancel}>
+      Cancel Session
+    </button>
   );
 }
 
@@ -448,6 +527,16 @@ export default function Sessions() {
   const [rejecting, setRejecting] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [jitsiSession, setJitsiSession] = useState(null); // session object to join via Jitsi
+  const [now, setNow] = useState(() => new Date());
+
+  // Tick every 30 seconds so "Join" button appears/disappears as time passes
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'PeerLink User';
 
   const all = sessions.data || [];
   const isTutor = user.role_key === 'tutor';
@@ -502,7 +591,7 @@ export default function Sessions() {
     const ok = await confirm({
       title: `${action} session request?`,
       message: decision === 'accepted'
-        ? `Accept the ${s.subject_name} session with ${s.student_name} on ${dayTag(asDate(s.scheduled_start))} at ${fmtTime(asDate(s.scheduled_start))}?`
+        ? `Accept the ${s.subject_name} session with ${s.student_name}? The student will choose the date and time when they pay.`
         : `Reject ${s.student_name}'s ${s.subject_name} session request?`,
       confirmText: action
     });
@@ -528,6 +617,7 @@ export default function Sessions() {
   };
 
   return (
+    <>
     <div>
       <div className="page-head">
         <h2>Sessions</h2>
@@ -566,9 +656,17 @@ export default function Sessions() {
                     : `Your session starts on ${dayTag(nextStart)} at ${fmtTime(nextStart)}`}
                 </span>
               </div>
-              <button type="button" className="btn-join" onClick={() => chatTutor(next)}>
-                Chat Tutor
-              </button>
+              <div style={{ display: 'flex', gap: 10, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {isJoinable(next, now) && (
+                  <button type="button" className="btn-join-video" onClick={() => setJitsiSession(next)}>
+                    <VideoIcon />
+                    {isLive(next, now) ? 'Join Live Session' : 'Join Video Session'}
+                  </button>
+                )}
+                <button type="button" className="btn-join" onClick={() => chatTutor(next)}>
+                  Chat Tutor
+                </button>
+              </div>
             </section>
           )}
         </>
@@ -617,6 +715,8 @@ export default function Sessions() {
               onDeclineReschedule={(x) => respondReschedule(x, 'rejected')}
               hasPendingReq={hasPendingReq}
               myRequest={myRequest}
+              onJoin={setJitsiSession}
+              now={now}
             />
           ) : (
             <div className="session-card" key={s.id}>
@@ -638,9 +738,14 @@ export default function Sessions() {
                   )}
                 </p>
                 <div className="session-pills">
-                  <span className="pill pill--neutral">{dayTag(start)}</span>
-                  <span className="pill pill--neutral">{fmtRange(start, end)}</span>
+                  {hasConfirmedSchedule(s) && (
+                    <>
+                      <span className="pill pill--neutral">{dayTag(start)}</span>
+                      <span className="pill pill--neutral">{fmtRange(start, end)}</span>
+                    </>
+                  )}
                   <span className={`pill ${meta.cls}`}>{statusLabel}</span>
+                  {isLive(s, now) && <span className="pill pill--live">● Live</span>}
                   {s.learning_mode && <span className="pill pill--neutral">Learning: {modeLabel(s.learning_mode)}</span>}
                   {!isTutor && s.status === 'accepted' && !s.payment_id && s.pending_payment_id && (
                     <span className="pill pill--pending">Payment pending — awaiting tutor confirmation</span>
@@ -683,7 +788,7 @@ export default function Sessions() {
                   </>
                 )}
                 {!isTutor && s.status === 'pending' && (
-                  <StudentCancel session={s} onCancel={() => setCancelling(s)} />
+                  <StudentCancel onCancel={() => setCancelling(s)} />
                 )}
                 {s.status === 'accepted' && (
                   <>
@@ -693,6 +798,12 @@ export default function Sessions() {
                         onClick={() => setPaying(s)}
                       >
                         Pay
+                      </button>
+                    )}
+                    {isJoinable(s, now) && (
+                      <button className="action-btn action-btn--video" onClick={() => setJitsiSession(s)}>
+                        <VideoIcon />
+                        {isLive(s, now) ? 'Join Live Session' : 'Join Video Session'}
                       </button>
                     )}
                     {s.payment_id && !hasPendingReq && (
@@ -711,12 +822,12 @@ export default function Sessions() {
                       </>
                     )}
                     {isTutor
-                      ? !s.payment_id && (
+                      ? !s.payment_id && !s.pending_payment_id && (
                         <button className="action-btn action-btn--cancel" onClick={() => cancelSession(s)}>
                           Cancel
                         </button>
                       )
-                      : !s.payment_id && <StudentCancel session={s} onCancel={() => setCancelling(s)} />}
+                      : !s.payment_id && !s.pending_payment_id && <StudentCancel onCancel={() => setCancelling(s)} />}
                   </>
                 )}
                 {(s.status === 'rejected' || s.status === 'cancelled') && !isTutor && (
@@ -774,5 +885,13 @@ export default function Sessions() {
         />
       )}
     </div>
+    {jitsiSession && (
+      <JitsiMeetModal
+        roomName={jitsiSession.jitsi_room_name}
+        displayName={displayName}
+        onClose={() => setJitsiSession(null)}
+      />
+    )}
+  </>
   );
 }

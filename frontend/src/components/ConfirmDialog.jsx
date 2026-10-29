@@ -3,6 +3,7 @@ import React from 'react';
 export default function ConfirmDialog({
   title = 'Are you sure?',
   message,
+  preview,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   danger = false,
@@ -16,6 +17,7 @@ export default function ConfirmDialog({
           <h3>{title}</h3>
           <button type="button" className="btn btn-ghost" onClick={onCancel}>×</button>
         </div>
+        {preview && <img className="confirm-photo-preview" src={preview} alt="Selected profile photo" />}
         <div className="confirm-message">{message}</div>
         <div className="confirm-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>{cancelText}</button>

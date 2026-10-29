@@ -50,7 +50,7 @@ async function createProfile({ userId, year_level, course, bio, age, grade_level
 async function updateProfile(userId, fields) {
   const allowed = [
     'year_level', 'course', 'bio', 'age', 'grade_level', 'school', 'strand',
-    'contact_no', 'gender',
+    'contact_no', 'gender', 'profile_picture',
     'subjects_needed', 'learning_mode', 'preferred_schedule', 'preferred_time'
   ];
   const sets = [];

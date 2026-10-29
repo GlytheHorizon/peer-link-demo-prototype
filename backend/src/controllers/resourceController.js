@@ -42,7 +42,7 @@ const list = asyncHandler(async (req, res) => {
  * GET /api/resources/folders — the Resources page payload.
  * Students only get folders for tutors they have a confirmed and paid session
  * with (accepted + payment, or completed); tutors get their own folder;
- * faculty and admins get everything.
+ * admins get everything.
  */
 const folders = asyncHandler(async (req, res) => {
   const role = req.user.role;

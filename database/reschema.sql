@@ -36,6 +36,40 @@ CALL AddColumnIfNotExists('sessions', 'learning_mode', 'VARCHAR(20) NULL');
 CALL AddColumnIfNotExists('conversation_payments', 'session_id', 'BIGINT NULL');
 CALL AddColumnIfNotExists('conversation_payments', 'reject_reason', 'VARCHAR(300) NULL');
 CALL AddColumnIfNotExists('tutor_profiles', 'verification_status', "ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'");
+CALL AddColumnIfNotExists('student_profiles', 'profile_picture', 'VARCHAR(255) NULL');
+CALL AddColumnIfNotExists('tutor_profiles', 'profile_picture', 'VARCHAR(255) NULL');
+CALL AddColumnIfNotExists('users', 'stripe_customer_id', 'VARCHAR(50) NULL');
+CALL AddColumnIfNotExists('payments', 'stripe_payment_method_id', 'VARCHAR(50) NULL');
+
+-- Tutor payout account + real card charge tracking
+CALL AddColumnIfNotExists('users', 'payout_account_number', 'VARCHAR(34) NULL');
+CALL AddColumnIfNotExists('users', 'payout_account_name', 'VARCHAR(120) NULL');
+CALL AddColumnIfNotExists('users', 'payout_updated_at', 'DATETIME NULL');
+CALL AddColumnIfNotExists('payments', 'stripe_payment_intent_id', 'VARCHAR(100) NULL');
+CALL AddColumnIfNotExists('payments', 'charged_amount_usd', 'DECIMAL(10,2) NULL');
+CALL AddColumnIfNotExists('payments', 'charged_currency', 'VARCHAR(3) NULL');
+CALL AddColumnIfNotExists('payments', 'fx_rate', 'DECIMAL(10,4) NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'stripe_payment_intent_id', 'VARCHAR(100) NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'charged_amount_usd', 'DECIMAL(10,2) NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'charged_currency', 'VARCHAR(3) NULL');
+CALL AddColumnIfNotExists('conversation_payments', 'fx_rate', 'DECIMAL(10,4) NULL');
+
+-- saved payment methods table for the Payment tab
+CREATE TABLE IF NOT EXISTS user_payment_methods (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id          BIGINT NOT NULL,
+  stripe_payment_method_id VARCHAR(50) NOT NULL,
+  brand            VARCHAR(40) NULL,
+  last4            VARCHAR(4) NULL,
+  exp_month        SMALLINT NULL,
+  exp_year         SMALLINT NULL,
+  is_default       TINYINT(1) NOT NULL DEFAULT 0,
+  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_upm_user (user_id),
+  KEY idx_upm_stripe (stripe_payment_method_id),
+  CONSTRAINT fk_upm_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  UNIQUE KEY uq_upm_user_stripe (user_id, stripe_payment_method_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CALL AddColumnIfNotExists('users', 'suspended_until', 'DATETIME NULL');
 CALL AddColumnIfNotExists('users', 'suspension_reason', 'TEXT NULL');
 CALL AddColumnIfNotExists('users', 'is_banned', 'TINYINT(1) NOT NULL DEFAULT 0');
@@ -113,3 +147,15 @@ CREATE TABLE IF NOT EXISTS user_warnings (
   CONSTRAINT fk_user_warnings_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
   CONSTRAINT fk_user_warnings_admin FOREIGN KEY (admin_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- ------------------------------------------------------------
+-- Faculty role removed — only students, tutors and admins remain
+-- ------------------------------------------------------------
+DELETE FROM users WHERE role = 'faculty';
+ALTER TABLE users MODIFY COLUMN role ENUM('student','tutor','admin') NOT NULL DEFAULT 'student';
+
+-- ------------------------------------------------------------
+-- Stripe is the only supported session payment method; make sure the
+-- payments.method ENUM actually accepts it on databases created from an
+-- older schema (which had gcash/maya/bank_card only).
+-- ------------------------------------------------------------
+ALTER TABLE payments MODIFY COLUMN method ENUM('stripe') NOT NULL DEFAULT 'stripe';

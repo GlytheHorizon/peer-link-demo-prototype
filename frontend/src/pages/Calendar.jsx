@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { sessionService } from '../services';
+import { asDate } from '../utils/datetime';
 import { Spinner, Alert } from '../components/ui';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -11,7 +12,7 @@ const pad = (n) => String(n).padStart(2, '0');
 const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 const fmtTime12 = (iso) => {
-  const d = new Date(iso);
+  const d = asDate(iso);
   const h = d.getHours() % 12 || 12;
   const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
   return `${h}:${pad(d.getMinutes())}${ampm}`;
@@ -41,7 +42,7 @@ export default function Calendar() {
 
   const upcoming = useMemo(
     () => all.filter(
-      (s) => (s.status === 'pending' || s.status === 'accepted') && new Date(s.scheduled_start) > new Date()
+      (s) => (s.status === 'pending' || s.status === 'accepted') && asDate(s.scheduled_start) > new Date()
     ),
     [all]
   );
@@ -49,11 +50,11 @@ export default function Calendar() {
   const byDate = useMemo(() => {
     const map = {};
     for (const s of upcoming) {
-      const k = dateKey(new Date(s.scheduled_start));
+      const k = dateKey(asDate(s.scheduled_start));
       (map[k] = map[k] || []).push(s);
     }
     for (const k of Object.keys(map)) {
-      map[k].sort((a, b) => new Date(a.scheduled_start) - new Date(b.scheduled_start));
+      map[k].sort((a, b) => asDate(a.scheduled_start) - asDate(b.scheduled_start));
     }
     return map;
   }, [upcoming]);

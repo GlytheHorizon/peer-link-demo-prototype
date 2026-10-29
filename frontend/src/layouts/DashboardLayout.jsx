@@ -5,6 +5,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { conversationService, tabUpdateService } from '../services';
 import WarningToast from '../components/WarningToast';
 import SessionTimeoutModal from '../components/SessionTimeoutModal';
+import { Avatar } from '../components/ui';
 import useIdleTimeout from '../hooks/useIdleTimeout';
 
 const SEEN_PREFIX = 'peerlink_tab_seen';
@@ -39,10 +40,6 @@ const NAV = {
     { to: '/earnings', label: 'Earnings', icon: '¤' },
     { to: '/profile', label: 'Profile', icon: '✎' },
     { to: '/verification', label: 'Verification', icon: '✓' }
-  ],
-  faculty: [
-    { to: '/dashboard', label: 'Dashboard', icon: '▤' },
-    { to: '/reports', label: 'Reports', icon: '◫' }
   ],
   admin: [
     { to: '/admin/verifications', label: 'Tutor Verifications', icon: '✓' },
@@ -223,6 +220,13 @@ export default function DashboardLayout({ children }) {
           <button className="btn btn-ghost burger" onClick={() => setOpen(!open)}>☰</button>
           <span className="topbar-title">PeerLink</span>
           <span className="topbar-user">
+            {user && (
+              <Avatar
+                name={`${user.first_name || ''} ${user.last_name || ''}`}
+                src={user.profile_picture}
+                className="topbar-avatar"
+              />
+            )}
             {user ? `${user.first_name} ${user.last_name}` : ''}
             {roleLabel && <span className="role-tag">{roleLabel}</span>}
           </span>

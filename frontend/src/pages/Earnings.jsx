@@ -1,12 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { sessionService } from '../services';
+import { sessionService, stripeService } from '../services';
 import { Spinner, Alert, EmptyState } from '../components/ui';
+import { asDate } from '../utils/datetime';
 
 const RATE_PER_HOUR = 100;
-
-const asDate = (v) => (v instanceof Date ? v : new Date(v));
 
 const fmtLongDate = (d) =>
   asDate(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -39,6 +38,128 @@ const inPeriod = (date, period) => {
   }
   return d.getFullYear() === now.getFullYear();
 };
+
+/**
+ * Payout account card: the account number the tutor's earnings are sent to.
+ * Session payments themselves land in the PeerLink Stripe account.
+ */
+function PayoutAccountCard() {
+  const account = useApi(stripeService.payoutAccount, [], 0);
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const data = account.data;
+  const hasAccount = !!data?.has_account;
+
+  useEffect(() => {
+    if (data) setAccountName(data.account_name || '');
+  }, [data]);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    const res = await stripeService.savePayoutAccount({
+      account_number: accountNumber,
+      account_name: accountName
+    });
+    setBusy(false);
+    if (res.ok) {
+      setMsg('Payout account saved.');
+      setAccountNumber('');
+      account.reload();
+      return;
+    }
+    setErr((res.details && res.details[0]) || res.message);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    const res = await stripeService.removePayoutAccount();
+    setBusy(false);
+    if (res.ok) {
+      setMsg('Payout account removed.');
+      account.reload();
+      return;
+    }
+    setErr(res.message);
+  };
+
+  return (
+    <section className="card payout-card">
+      <div className="payout-card-head">
+        <div>
+          <h3>Payouts</h3>
+          <p className="muted small">
+            Students pay by card into PeerLink&apos;s Stripe account — amounts are charged in USD, converted
+            from pesos at the current rate. Your share is released to the account number saved below.
+          </p>
+        </div>
+        <span className={`payout-pill ${hasAccount ? 'is-on' : 'is-off'}`}>
+          {account.loading ? 'Checking…' : hasAccount ? 'Account saved' : 'Not set'}
+        </span>
+      </div>
+
+      {msg && <Alert type="success">{msg}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
+      {account.error && <Alert type="error">{account.error.message}</Alert>}
+
+      {hasAccount && (
+        <div className="payout-rows">
+          <div className="payout-row">
+            <span>Payout account</span>
+            <b>•••• {data.account_number_last4}</b>
+          </div>
+          <div className="payout-row">
+            <span>Account name</span>
+            <b>{data.account_name || 'Not provided'}</b>
+          </div>
+        </div>
+      )}
+
+      <form className="form payout-form" onSubmit={save}>
+        <div className="grid-2">
+          <div>
+            <label>{hasAccount ? 'Replace account number' : 'Account number'}</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder={hasAccount ? 'Enter a new account number' : 'e.g. 0012 3456 7890'}
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label>Account name</label>
+            <input
+              type="text"
+              placeholder="Name on the account"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="row-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : hasAccount ? 'Update payout account' : 'Save payout account'}
+          </button>
+          {hasAccount && (
+            <button className="btn btn-ghost" type="button" disabled={busy} onClick={remove}>
+              Remove
+            </button>
+          )}
+        </div>
+      </form>
+    </section>
+  );
+}
 
 export default function Earnings() {
   const sessions = useApi(sessionService.list, [], 15000);
@@ -77,6 +198,8 @@ export default function Earnings() {
   return (
     <div className="earnings-page">
       <h2 className="earnings-title">Earnings</h2>
+
+      <PayoutAccountCard />
 
       <div className="earn-periods" role="tablist" aria-label="Earnings period">
         {PERIODS.map((p) => (

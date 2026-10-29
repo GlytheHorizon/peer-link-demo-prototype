@@ -3,12 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
 import { sessionService, conversationService } from '../services';
-import { Spinner, Alert, EmptyState } from '../components/ui';
-
-const asDate = (v) => (v instanceof Date ? v : new Date(v));
-
-const initials = (name = '') =>
-  name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+import { Spinner, Alert, EmptyState, Avatar } from '../components/ui';
+import { asDate } from '../utils/datetime';
 
 const fmtShortDate = (d) =>
   asDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -71,7 +67,7 @@ export default function MyStudents() {
   for (const s of all) {
     if (s.status === 'rejected') continue;
     if (!studentMap.has(s.student_id)) {
-      studentMap.set(s.student_id, { student_id: s.student_id, name: s.student_name, sessions: [] });
+      studentMap.set(s.student_id, { student_id: s.student_id, name: s.student_name, picture: s.student_picture, sessions: [] });
     }
     studentMap.get(s.student_id).sessions.push(s);
   }
@@ -172,7 +168,7 @@ export default function MyStudents() {
       {requests.slice(0, 3).map((s) => (
         <div className="req-card" key={s.id}>
           <div className="req-card-top">
-            <span className="req-avatar">{initials(s.student_name)}</span>
+            <Avatar name={s.student_name} src={s.student_picture} className="req-avatar" />
             <div className="req-main">
               <Link className="req-name" to={`/students/${s.student_id}`}>{s.student_name}</Link>
               <span className="req-subject req-subject--blue">{s.subject_name}</span>
@@ -203,7 +199,7 @@ export default function MyStudents() {
       <div className="student-list">
         {filteredStudents.map((st) => (
           <div className="student-card" key={st.student_id}>
-            <span className="req-avatar">{initials(st.name)}</span>
+            <Avatar name={st.name} src={st.picture} className="req-avatar" />
             <div className="req-main">
               <Link className="req-name" to={`/students/${st.student_id}`}>{st.name}</Link>
               <div className="student-sub-row">

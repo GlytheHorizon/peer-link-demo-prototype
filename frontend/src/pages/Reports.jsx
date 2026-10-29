@@ -6,7 +6,7 @@ import { reportService } from '../services';
 import { Spinner, Alert, Modal, InfoBox, EmptyState, RatingStars, formatDateTime } from '../components/ui';
 
 /* ------------------------------------------------------------------ *
- *  Academic & tutoring reports (faculty)
+ *  Academic & tutoring reports (admin)
  * ------------------------------------------------------------------ */
 
 function Overview() {

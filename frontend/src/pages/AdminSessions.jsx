@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { adminService } from '../services';
 import { useConfirm } from '../context/ConfirmContext';
+import { asDate } from '../utils/datetime';
 import { Spinner, Alert, EmptyState } from '../components/ui';
 
 const STATUS_META = {
@@ -18,9 +19,9 @@ const LEARNING_MODE_LABELS = {
   both: 'Both'
 };
 const modeLabel = (m) => LEARNING_MODE_LABELS[m] || '—';
-const fmtDate = (v) => new Date(v).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long' });
-const fmtTime = (v) => new Date(v).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
-const fmtShortDate = (v) => new Date(v).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
+const fmtDate = (v) => asDate(v).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long' });
+const fmtTime = (v) => asDate(v).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
+const fmtShortDate = (v) => asDate(v).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
 
 export default function ManageSessions() {
   const confirm = useConfirm();

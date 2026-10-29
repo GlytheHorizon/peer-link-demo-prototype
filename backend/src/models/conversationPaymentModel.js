@@ -8,10 +8,19 @@ function selectWithNames() {
             JOIN users t ON t.id = p.tutor_id`;
 }
 
-async function create({ conversationId, sessionId = null, studentId, tutorId, amount, reference }) {
+async function create({
+  conversationId, sessionId = null, studentId, tutorId, amount, reference,
+  stripePaymentIntentId, chargedAmountUsd, chargedCurrency, fxRate
+}) {
   const result = await query(
-    'INSERT INTO conversation_payments (conversation_id, session_id, student_id, tutor_id, amount, reference) VALUES (?, ?, ?, ?, ?, ?)',
-    [conversationId, sessionId, studentId, tutorId, amount, reference || null]
+    `INSERT INTO conversation_payments
+       (conversation_id, session_id, student_id, tutor_id, amount, reference, stripe_payment_intent_id,
+        charged_amount_usd, charged_currency, fx_rate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      conversationId, sessionId, studentId, tutorId, amount, reference || null, stripePaymentIntentId || null,
+      chargedAmountUsd || null, chargedCurrency || null, fxRate || null
+    ]
   );
   return findById(result.insertId);
 }

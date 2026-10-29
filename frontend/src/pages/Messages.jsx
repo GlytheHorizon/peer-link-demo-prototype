@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApi } from '../hooks/useApi';
 import { useConfirm } from '../context/ConfirmContext';
 import { conversationService, sessionService, userService, evaluationService } from '../services';
-import { Spinner, Alert, formatDateTime, EmptyState } from '../components/ui';
+import { Spinner, Alert, formatDateTime, EmptyState, Avatar } from '../components/ui';
 import RescheduleModal from '../components/RescheduleModal';
 
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
@@ -39,13 +39,8 @@ function isOnline(conv, user) {
   return Date.now() - t < ONLINE_WINDOW_MS;
 }
 
-function initialsOf(name) {
-  const parts = String(name || '').split(/\s+/).filter(Boolean);
-  return parts.slice(0, 2).map((p) => (p[0] || '').toUpperCase()).join('') || '?';
-}
-
-function MiniAvatar({ name }) {
-  return <span className="mini-avatar" aria-hidden="true">{initialsOf(name)}</span>;
+function MiniAvatar({ name, src }) {
+  return <Avatar name={name} src={src} className="mini-avatar" />;
 }
 
 function OnlineStatus({ online }) {
@@ -121,6 +116,8 @@ function PaymentCard({ payment, conv, user, session, onChanged }) {
           {amount ? <>{amount} · </> : null}
           {payment.reference ? <>{payment.reference} · </> : null}
           {formatDateTime(payment.created_at)}
+          {session?.scheduled_start ? <>{' · '}Session starts {formatDateTime(session.scheduled_start)}</> : null}
+          {session?.scheduled_end ? <>{' · '}Session ends {formatDateTime(session.scheduled_end)}</> : null}
         </p>
         {payment.status === 'pending' && (
           <p className="payment-note">
@@ -338,6 +335,7 @@ function Thread({ conversationId, onChanged }) {
   if (loading) return <div className="chat-loading"><Spinner /></div>;
 
 const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.student_name);
+  const otherPicture = conv && (conv.student_id === user.id ? conv.tutor_picture : conv.student_picture);
   const online = isOnline(conv, user);
   const session = (conv && sessions.find((s) => Number(s.conversation_id) === Number(conv.id))) || null;
   const isTutor = !!conv && Number(conv.tutor_id) === Number(user.id);
@@ -352,7 +350,7 @@ const otherName = conv && (conv.student_id === user.id ? conv.tutor_name : conv.
     <div className="chat">
       <div className="chat-head">
         <Link className="btn btn-ghost back-link" to="/messages">← Back</Link>
-        <MiniAvatar name={otherName} />
+        <MiniAvatar name={otherName} src={otherPicture} />
         <div className="chat-head-info">
           <div className="chat-head-name">
             {conv && <span className="chat-head-subject truncate">{conv.subject_name}</span>}
@@ -617,10 +615,11 @@ export default function Messages() {
           {filtered.map((c) => {
             const active = String(c.id) === String(id);
             const other = c.student_id === user.id ? c.tutor_name : c.student_name;
+            const otherPicture = c.student_id === user.id ? c.tutor_picture : c.student_picture;
             const otherProfile = c.student_id === user.id ? `/tutors/${c.tutor_id}` : `/students/${c.student_id}`;
             return (
               <Link key={c.id} to={`/messages/${c.id}`} className={`msg-item ${active ? 'active' : ''}`}>
-                <MiniAvatar name={other} />
+                <MiniAvatar name={other} src={otherPicture} />
                 <div className="msg-item-main">
                   <div className="msg-item-top">
                     <b className="msg-item-name">

@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const config = require('./config');
 const { protect } = require('./middleware/auth');
@@ -20,6 +21,17 @@ app.use((req, res, next) => {
 // Health check
 app.get('/api/health', (req, res) => res.json({ success: true, message: 'PeerLink API is running', data: { time: new Date().toISOString() } }));
 
+// Profile pictures are public images (unlike the rest of uploads/, which stays private).
+const uploadsRoot = path.join(__dirname, '..', '..', 'uploads');
+app.use(
+  '/api/uploads/students/profile_picture',
+  express.static(path.join(uploadsRoot, 'students', 'profile_picture'), { maxAge: '7d' })
+);
+app.use(
+  '/api/uploads/tutors/profile_picture',
+  express.static(path.join(uploadsRoot, 'tutors', 'profile_picture'), { maxAge: '7d' })
+);
+
 // API routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
@@ -36,6 +48,7 @@ app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/activity-logs', require('./routes/activityLogRoutes'));
 app.use('/api/resources', require('./routes/resourceRoutes'));
+app.use('/api/stripe', require('./routes/stripeRoutes'));
 
 app.get('/api/roles', protect, (req, res) =>
   res.json({ success: true, message: 'Role check', data: { role: req.user.role } })

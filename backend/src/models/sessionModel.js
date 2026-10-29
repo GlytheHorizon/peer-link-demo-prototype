@@ -1,11 +1,14 @@
 const { query } = require('../config/db');
 
 const SESSION_SELECT = `
-  SELECT s.*, sub.code AS subject_code, sub.name AS subject_name,
+  SELECT s.*, s.jitsi_room_name, sub.code AS subject_code, sub.name AS subject_name,
          CONCAT(stu.first_name, ' ', stu.last_name) AS student_name, stu.email AS student_email,
+         sp.profile_picture AS student_picture,
          CONCAT(tut.first_name, ' ', tut.last_name) AS tutor_name, tut.email AS tutor_email,
+         tpf.profile_picture AS tutor_picture,
          e.id AS evaluation_id, e.rating AS evaluation_rating,
          COALESCE(p.id, cp.id) AS payment_id, p.method AS payment_method,
+         p.stripe_payment_method_id AS payment_stripe_method,
          COALESCE(p.amount, cp.amount) AS payment_amount,
          COALESCE(p.status, cp.status) AS payment_status,
          COALESCE(p.created_at, cp.created_at) AS paid_at,
@@ -23,6 +26,7 @@ const SESSION_SELECT = `
     JOIN subjects sub ON sub.id = s.subject_id
     JOIN users stu ON stu.id = s.student_id
     JOIN users tut ON tut.id = s.tutor_id
+    LEFT JOIN student_profiles sp ON sp.user_id = stu.id
     LEFT JOIN tutor_profiles tpf ON tpf.user_id = tut.id
     LEFT JOIN tutor_subjects tsr ON tsr.tutor_profile_id = tpf.id AND tsr.subject_id = s.subject_id
     LEFT JOIN evaluations e ON e.session_id = s.id
@@ -120,6 +124,11 @@ async function updateSchedule(id, scheduledStart, scheduledEnd) {
   await query('UPDATE sessions SET scheduled_start = ?, scheduled_end = ? WHERE id = ?', [scheduledStart, scheduledEnd, id]);
 }
 
+/** Sets the Jitsi Meet room name for a session (generated once on payment confirmation). */
+async function setJitsiRoom(id, roomName) {
+  await query('UPDATE sessions SET jitsi_room_name = ? WHERE id = ?', [roomName, id]);
+}
+
 /** Forces a session to 'completed'. Used to heal sessions where both sides
  *  confirmed under an older buggy version but the status never flipped. */
 async function forceComplete(id) {
@@ -178,4 +187,4 @@ async function countBetween(start, end) {
   return rows[0].total;
 }
 
-module.exports = { findById, create, updateLearningMode, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, forceComplete, updateSchedule, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };
+module.exports = { findById, create, updateLearningMode, listForStudent, listForTutor, updateStatus, cancel, confirmCompletion, forceComplete, updateSchedule, setJitsiRoom, remove, hasOverlap, hasActiveBooking, countByStatus, countBetween };

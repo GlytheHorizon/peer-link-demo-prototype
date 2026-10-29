@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { adminService } from '../services';
 import { Spinner, Alert, Modal, formatDateTime } from '../components/ui';
 
-const ROLES = ['student', 'tutor', 'faculty', 'admin'];
+const ROLES = ['student', 'tutor', 'admin'];
 
 export default function UserManagement() {
   const confirm = useConfirm();

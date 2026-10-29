@@ -35,7 +35,7 @@ const create = asyncHandler(async (req, res) => {
 
 /** GET /api/evaluations/mine — evaluations I gave (student) or received (tutor). */
 const listMine = asyncHandler(async (req, res) => {
-  const data = req.user.role === 'tutor' || req.user.role === 'faculty'
+  const data = req.user.role === 'tutor'
     ? await evaluationModel.listReceivedByTutor(req.user.id)
     : await evaluationModel.listGivenByStudent(req.user.id);
   ok(res, 200, data);

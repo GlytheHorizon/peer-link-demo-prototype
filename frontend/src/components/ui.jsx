@@ -1,4 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { asDate } from '../utils/datetime';
+
+/** Shows the uploaded profile picture, falling back to the user's initials. */
+export function Avatar({ name, src, className = '' }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+
+  const initials = (name || '?')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <span className={`avatar-media ${className}`} aria-hidden="true">
+      {src && !broken ? (
+        <img
+          className="avatar-img"
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        initials
+      )}
+    </span>
+  );
+}
 
 export function Spinner({ label = 'Loading…' }) {
   return (
@@ -73,14 +104,14 @@ export function StatusBadge({ status }) {
 
 export function formatDateTime(value) {
   if (!value) return '—';
-  const d = new Date(value);
+  const d = asDate(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function formatDate(value) {
   if (!value) return '—';
-  const d = new Date(value);
+  const d = asDate(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium' });
 }

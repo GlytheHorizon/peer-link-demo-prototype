@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../context/ConfirmContext';
 import { sessionService } from '../services';
+import { asDate, fmtTime, fmtRange } from '../utils/datetime';
 import { Alert, Modal } from './ui';
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
@@ -8,11 +9,6 @@ const MIN_DURATION_MS = 15 * 60 * 1000;
 const pad = (n) => String(n).padStart(2, '0');
 const toDateInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const toTimeInput = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-
-const asDate = (v) => (v instanceof Date ? v : new Date(v));
-
-const fmtTime = (d) => asDate(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-const fmtRange = (start, end) => `${fmtTime(start)} - ${fmtTime(end)}`;
 
 const fmtDuration = (ms) => {
   const totalMin = Math.round(ms / 60000);

@@ -43,7 +43,7 @@ CREATE TABLE users (
   password_hash       VARCHAR(255) NOT NULL,
   first_name          VARCHAR(100) NOT NULL,
   last_name           VARCHAR(100) NOT NULL,
-  role                ENUM('student','tutor','faculty','admin') NOT NULL DEFAULT 'student',
+  role                ENUM('student','tutor','admin') NOT NULL DEFAULT 'student',
   is_active           TINYINT(1) NOT NULL DEFAULT 1,
   suspended_until     DATETIME NULL,
   suspension_reason   TEXT NULL,
@@ -55,7 +55,32 @@ CREATE TABLE users (
   created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_email (email),
-  KEY idx_users_role (role)
+  KEY idx_users_role (role),
+  KEY idx_users_stripe_customer (stripe_customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Stripe customer + saved payment methods
+ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(50) NULL AFTER updated_at;
+
+-- Payout account a tutor's earnings are sent to
+ALTER TABLE users ADD COLUMN payout_account_number VARCHAR(34) NULL AFTER stripe_customer_id;
+ALTER TABLE users ADD COLUMN payout_account_name VARCHAR(120) NULL AFTER payout_account_number;
+ALTER TABLE users ADD COLUMN payout_updated_at DATETIME NULL AFTER payout_account_name;
+
+CREATE TABLE user_payment_methods (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id          BIGINT NOT NULL,
+  stripe_payment_method_id VARCHAR(50) NOT NULL,
+  brand            VARCHAR(40) NULL,
+  last4            VARCHAR(4) NULL,
+  exp_month        SMALLINT NULL,
+  exp_year         SMALLINT NULL,
+  is_default       TINYINT(1) NOT NULL DEFAULT 0,
+  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_upm_user (user_id),
+  KEY idx_upm_stripe (stripe_payment_method_id),
+  CONSTRAINT fk_upm_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  UNIQUE KEY uq_upm_user_stripe (user_id, stripe_payment_method_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
@@ -73,6 +98,7 @@ CREATE TABLE student_profiles (
   strand             VARCHAR(50) NULL,
   contact_no         VARCHAR(20) NULL,
   gender             VARCHAR(20) NULL,
+  profile_picture    VARCHAR(255) NULL,
   subjects_needed    JSON NULL,
   learning_mode      VARCHAR(20) NULL,
   preferred_schedule JSON NULL,
@@ -101,6 +127,7 @@ CREATE TABLE tutor_profiles (
   strand             VARCHAR(50) NULL,
   contact_no         VARCHAR(20) NULL,
   gender             VARCHAR(20) NULL,
+  profile_picture    VARCHAR(255) NULL,
   subjects_teach     JSON NULL,
   learning_mode      VARCHAR(20) NULL,
   preferred_schedule JSON NULL,
@@ -261,13 +288,18 @@ CREATE TABLE reschedule_requests (
 -- PAYMENTS
 -- ------------------------------------------------------------
 CREATE TABLE payments (
-  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-  session_id BIGINT NOT NULL,
-  student_id BIGINT NOT NULL,
-  method     ENUM('gcash','maya','bank_card') NOT NULL,
-  amount     DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  status     ENUM('paid','refunded') NOT NULL DEFAULT 'paid',
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id                      BIGINT AUTO_INCREMENT PRIMARY KEY,
+  session_id              BIGINT NOT NULL,
+  student_id              BIGINT NOT NULL,
+  method                  ENUM('stripe') NOT NULL DEFAULT 'stripe',
+  stripe_payment_method_id VARCHAR(50) NULL,
+  stripe_payment_intent_id VARCHAR(100) NULL,
+  amount                  DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  charged_amount_usd      DECIMAL(10,2) NULL,
+  charged_currency        VARCHAR(3) NULL,
+  fx_rate                 DECIMAL(10,4) NULL,
+  status                  ENUM('paid','refunded') NOT NULL DEFAULT 'paid',
+  created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_payments_session (session_id),
   KEY idx_payments_student (student_id),
   CONSTRAINT fk_payments_session FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE,
@@ -285,6 +317,10 @@ CREATE TABLE conversation_payments (
   tutor_id        BIGINT NOT NULL,
   amount          DECIMAL(10,2) NULL,
   reference       VARCHAR(150) NULL,
+  stripe_payment_intent_id VARCHAR(100) NULL,
+  charged_amount_usd DECIMAL(10,2) NULL,
+  charged_currency   VARCHAR(3) NULL,
+  fx_rate            DECIMAL(10,4) NULL,
   status          ENUM('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
   reject_reason   VARCHAR(300) NULL,
   created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -453,13 +489,12 @@ CREATE TABLE resources (
 
 -- ============================================================
 -- SEED DATA
--- Default passwords: Admin@123 / Faculty@123 / Tutor@123 / Student@123
+-- Default passwords: Admin@123 / Tutor@123 / Student@123
 -- Hashes generated with bcryptjs (cost 10)
 -- ============================================================
 
 INSERT INTO users (id, email, password_hash, first_name, last_name, role, is_active) VALUES
 (1, 'admin@peerlink.edu',     '$2a$10$vvDNXhEYATRXuM6NXzQW.eweNMp6/DT4iri5L6FyLcQG3ZUHzijgi', 'Alex',    'Admin',    'admin',   1),
-(2, 'faculty@peerlink.edu',   '$2a$10$JDusT272YLpZvBJ/CRJM0u0NnxGraIk0QqtNtms78LYSJzTipY56i', 'Dana',    'Faculty',  'faculty', 1),
 (3, 'maria@peerlink.edu',     '$2a$10$oqZpYzmn5EjTMD0mpfSbk.3YFAsP3MU.zcgnc8ozv2P8qMKam7h5u', 'Maria',   'Tutor',    'tutor',   1),
 (4, 'student@peerlink.edu',   '$2a$10$sxsfR9PejLT4wmo1A6i2Uer0XPVLGpd2RGZD6ptBm2lB9HBQ8Vt8K', 'Juswa',   'Student',  'student', 1),
 (5, 'gerome@peerlink.edu',    '$2a$10$oqZpYzmn5EjTMD0mpfSbk.3YFAsP3MU.zcgnc8ozv2P8qMKam7h5u', 'Gerome',  'Sanchez',  'tutor',   1),

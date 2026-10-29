@@ -6,7 +6,7 @@
 
 | Layer | Technology |
 |-------|------------|
-| User Layer | Students · Tutors · Faculty · Administrators |
+| User Layer | Students · Tutors · Administrators |
 | Presentation | React 18 + Vite (SPA) |
 | Application | Node.js + Express REST API |
 | Database | MySQL 5.7+ / 8.0+ / MariaDB (`mysql2` driver) |
@@ -16,7 +16,7 @@
 ## ✨ Features
 
 ### Core Platform
-- **Registration & Login** — JWT + bcrypt, role-based access control (student, tutor, faculty, admin)
+- **Registration & Login** — JWT + bcrypt, role-based access control (student, tutor, admin)
 - **Student Profiles** — subjects needed, course, year level, strand, learning preferences
 - **Tutor Profiles** — subjects taught with proficiency ratings (1–5), weekly availability, bio
 - **Automated Matching Engine** — 0–100 compatibility score per subject:
@@ -27,6 +27,7 @@
 - **Resources** — shared file/link library accessible to all roles
 - **Calendar** — session schedule view
 - **Earnings** — tutor earnings tracker
+- **Video Sessions (Jitsi Meet)** — in-app video conference per confirmed session; a Jitsi room (`peerlink-<sessionId>-<random>`) is generated when payment is confirmed, and both participants join within the scheduled window (`start − 15 min` → `end + 30 min`)
 
 ### Admin Features
 - **User Management** — create, edit, deactivate, delete users; search + pagination
@@ -49,7 +50,7 @@
   - Banned: *"Your account has been permanently banned. Reason: [Reason]."*
   - Expired suspensions are automatically lifted on the next login attempt
 
-### Faculty Features
+### Reports (admin)
 - Academic & tutoring reports: overview stats, sessions by subject/tutor, tutor performance, student activity
 
 ### Security
@@ -97,7 +98,6 @@ Edit the `NAV` object in `frontend/src/layouts/DashboardLayout.jsx` (lines ~19�
 const NAV = {
   student: [ /* student sidebar links */ ],
   tutor:   [ /* tutor sidebar links   */ ],
-  faculty: [ /* faculty sidebar links */ ],
   admin:   [ /* admin sidebar links   */ ],
 };
 ```
@@ -158,7 +158,8 @@ peerlink/
 │       │
 │       ├── utils/
 │       │   ├── http.js       ApiError, asyncHandler, ok()
-│       │   └── jwt.js        signToken / verifyToken
+│       │   ├── jwt.js        signToken / verifyToken
+│       │   └── jitsi.js      generateJitsiRoomName() — per-session Jitsi room
 │       │
 │       ├── validators/
 │       │   └── validate.js   Chainable validators (required, email, minLen…)
@@ -176,6 +177,7 @@ peerlink/
 │       │   ├── evaluationRoutes.js      /api/evaluations
 │       │   ├── reportRoutes.js          /api/reports
 │       │   ├── adminRoutes.js           /api/admin  (+ warn/suspend/ban)
+│       │   ├── stripeRoutes.js          /api/stripe — payment methods, payout account
 │       │   └── activityLogRoutes.js     /api/activity-logs
 │       │
 │       ├── controllers/
@@ -195,6 +197,7 @@ peerlink/
 │       │   │                           listUserReports, resolveUserReport
 │       │   ├── adminController.js      user/subject/session CRUD + stats,
 │       │   │                           warnUser, suspendUser, banUser
+│       │   ├── payoutAccountController.js  tutor Stripe payout account CRUD
 │       │   └── activityLogController.js  listLogs
 │       │
 │       ├── models/
@@ -212,10 +215,13 @@ peerlink/
 │       │   │                           updateStatus, hasOverlap, countByStatus
 │       │   ├── evaluationModel.js     create, findBySession, listReceived, listGiven,
 │       │   │                           ratingSummaryByTutor, listAll
+│       │   ├── paymentModel.js        session payments + student summary
+│       │   ├── conversationPaymentModel.js  conversation payments + clearance
 │       │   └── activityLogModel.js    insert, list
 │       │
 │       └── services/
 │           ├── matchingService.js     WEIGHTS, computeScore, generateMatches
+│           ├── stripeCharges.js      Stripe PaymentIntent charges + refunds, friendly errors
 │           └── activityLogService.js  log()
 │
 └── frontend/                 React SPA (Vite)
@@ -259,7 +265,8 @@ peerlink/
         │   │                        RatingStars, StatusBadge, formatDateTime, formatDate
         │   ├── ConfirmDialog.jsx     Custom confirm modal (replaces window.confirm)
         │   ├── ReportModal.jsx       Student/tutor report submission modal
-        │   └── WarningToast.jsx      Admin warning toast + acknowledgment flow
+        │   ├── WarningToast.jsx      Admin warning toast + acknowledgment flow
+        │   └── JitsiMeetModal.jsx    Jitsi Meet video conference overlay
         │                             ← EDIT POLL SPEED HERE (default: 5 seconds)
         │
         └── pages/
@@ -280,7 +287,7 @@ peerlink/
             ├── SessionDetails.jsx    Session detail — respond, complete, cancel, evaluate
             ├── TutorProfile.jsx      Public tutor profile (report button)
             ├── StudentProfile.jsx    Public student profile (report button)
-            ├── Reports.jsx           Faculty academic reports / Admin user reports
+            ├── Reports.jsx           Admin academic reports / user reports
             ├── SubjectManagement.jsx Admin subject CRUD
             ├── UserManagement.jsx    Admin user management + moderation actions
             │                         (Warn / Suspend / Ban per user row)
@@ -295,7 +302,7 @@ peerlink/
             ├── Payment.jsx
             ├── Verification.jsx      Tutor verification status / document upload
             ├── TutorStatus.jsx       Tutor account status view
-            └── ComingSoon.jsx        Placeholder page for unbuilt features           Payment page
+            └── ComingSoon.jsx        Placeholder page for unbuilt features
 ```
 
 ---
@@ -362,6 +369,12 @@ DB_NAME=peerlink
 JWT_SECRET=your-long-random-secret
 CLIENT_URL=http://localhost:5173
 PORT=5000
+
+# Stripe (test / sandbox mode — no real charges)
+STRIPE_SECRET_KEY=sk_test_xxxxxxxx
+STRIPE_PUBLISHABLE_KEY=pk_test_xxxxxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxx
+PHP_PER_USD=58
 ```
 
 ### 3. Frontend
@@ -381,7 +394,6 @@ npm run dev
 |---|---|---|---|
 | Student | `student@peerlink.edu` | `Student@123` | Matching, sessions, messages, resources, calendar, payment |
 | Tutor | `tutor@peerlink.edu` | `Tutor@123` | Sessions, students, earnings, verification, messages |
-| Faculty | `faculty@peerlink.edu` | `Faculty@123` | Academic reports (overview, sessions, tutors, students) |
 | Admin | `admin@peerlink.edu` | `Admin@123` | Full platform management + moderation |
 
 ---
@@ -391,7 +403,7 @@ npm run dev
 | Resource | Endpoints |
 |---|---|
 | Auth | `POST /api/auth/register` · `/login` · `/admin-login` · `/logout` · `GET /api/auth/me` |
-| Users | `GET/PUT /api/users/me` · `GET /api/users` (faculty+admin) |
+| Users | `GET/PUT /api/users/me` · `GET /api/users` (admin) |
 | Warnings | `GET /api/users/me/warnings/unacknowledged` · `POST /api/users/warnings/:id/acknowledge` |
 | Students | `GET/PUT /api/students/me` · `GET/PUT /api/students/me/subjects` |
 | Tutors | `GET/PUT /api/tutors/me` · subjects · `GET /api/tutors/:id` |
@@ -404,6 +416,7 @@ npm run dev
 | Reports | `GET /api/reports/overview` · sessions · tutors · students · user-reports |
 | Admin | Users CRUD · subjects · sessions · stats · `POST /api/admin/users/:id/warn` · `/suspend` · `/ban` |
 | Activity Logs | `GET /api/activity-logs` (admin) |
+| Stripe | `GET /api/stripe/config` · `POST/PATCH/DELETE /api/stripe/payment-method` · `GET /api/stripe/saved` · payout account |
 
 All protected endpoints require `Authorization: Bearer <jwt>`.  
 All responses use: `{ success: bool, message: string, data: any }`
@@ -431,6 +444,43 @@ Scheduling conflicts (exact, partial, overlapping) are blocked while sessions ar
 
 ---
 
+## 💳 Payments (Stripe — only supported method)
+
+Payments are handled exclusively through **Stripe** (cards only). No PayPal / GCash / bank-card options are supported.
+
+### How it works
+1. **Add card** — student adds a card via the Stripe Card Element (`/api/stripe/payment-method` attaches a Stripe PaymentMethod to the user's Stripe customer).
+2. **Pay** — student pays via `POST /api/sessions/:id/pay` with `{ method: 'stripe', stripe_payment_method_id, ... }`.
+3. **Backend charges** — `backend/src/services/stripeCharges.js` creates + confirms a Stripe **PaymentIntent** (`automatic_payment_methods: { enabled: true, allow_redirects: 'never' }`).
+4. **Tutor confirms** — tutor accepts the pending payment in the conversation → session is confirmed; tutor-side accept can trigger a Stripe refund via `stripe.refunds.create`.
+
+### Sandbox / Test mode (no real money moves)
+- Keys are expected in **test mode** (`sk_test_...` secret, `pk_test_...` publishable).
+- Charges run against the **Stripe test balance** — no real money is collected.
+- Use the **Stripe test card: `4242 4242 4242 4242`** (any future expiry + any CVC).
+
+### Required Stripe env vars (backend/.env)
+```env
+STRIPE_SECRET_KEY=sk_test_xxxxxxxx        # from Stripe Dashboard → Developers → API keys
+STRIPE_PUBLISHABLE_KEY=pk_test_xxxxxxxx  # from Stripe Dashboard → Developers → API keys
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxx      # optional for this flow (PaymentIntent-based charges)
+PHP_PER_USD=58                            # PHP → USD conversion rate used for charges
+```
+
+### Where to get the API keys
+- Stripe Dashboard: <https://dashboard.stripe.com> → **Developers → API keys** → **Reveal test key** (`sk_test_...`) and copy the publishable key (`pk_test_...`).
+- Stripe npm packages (already installed): backend `stripe@^23`, frontend `@stripe/stripe-js@^10`.
+
+### Stripe endpoints
+- `GET /api/stripe/config` — publishable key + test-mode flag
+- `POST /api/stripe/payment-method` — attach a PaymentMethod
+- `PATCH /api/stripe/payment-method` — set default
+- `GET /api/stripe/saved` — list saved methods
+- `DELETE /api/stripe/payment-method/:id` — detach
+- `GET/PUT/DELETE /api/stripe/payout-account` (tutor) — payout account
+
+---
+
 ## 🔒 Security Notes
 
 - Passwords hashed with bcrypt (cost 10) — never stored plain
@@ -445,12 +495,12 @@ Scheduling conflicts (exact, partial, overlapping) are blocked while sessions ar
 ## ⚠️ Known Issues
 
 - Ensure MySQL server (XAMPP / WAMP / Apache MySQL) is running before starting the backend API server.
+- Stripe live-mode charges require a valid live secret key + payout setup; the current setup is sandbox/test mode only.
 
 ---
 
 ## 🗺 What's Left (Remaining ~4%)
 
-- Payment gateway integration (PayPal / GCash)
 - Push / email notifications for session requests and warnings
 - Tutor earnings payout flow
 - Mobile-responsive polish on a few dense admin tables

@@ -7,12 +7,12 @@ const userModel = require('../models/userModel');
 const studentModel = require('../models/studentModel');
 const tutorModel = require('../models/tutorModel');
 const appModel = require('../models/tutorApplicationModel');
-const { withTransaction, query } = require('../config/db');
+const { withTransaction, query, qex } = require('../config/db');
 const log = require('../services/activityLogService').log;
 const { sendPasswordResetEmail } = require('../services/emailService');
 
-const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', faculty: 'Faculty', admin: 'Administrator' };
-const RESET_TOKEN_EXPIRY_MINUTES = 10;
+const ROLE_LABELS = { student: 'Student', tutor: 'Tutor', admin: 'Administrator' };
+const RESET_TOKEN_EXPIRY_MINUTES = Number(process.env.RESET_TOKEN_EXPIRY_MINUTES || 10); // reset link lifetime in minutes
 
 /** Adds the tutor verification status (approved/pending/rejected/null) to a user object. */
 async function withVerification(user) {
@@ -38,7 +38,13 @@ async function withVerification(user) {
       }
     }
 
+    base.profile_picture = profile ? profile.profile_picture || null : null;
     base.verification_status = status || 'pending';
+  } else if (user.role === 'student') {
+    const profile = await studentModel.findProfileByUserId(user.id);
+    base.profile_picture = profile ? profile.profile_picture || null : null;
+  } else {
+    base.profile_picture = null;
   }
   return base;
 }
@@ -64,14 +70,15 @@ const register = asyncHandler(async (req, res) => {
     preferred_time: [v.maxLen(60)]
   }, req.body);
 
-  if (await userModel.findByEmail(email)) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (await userModel.findByEmail(normalizedEmail)) {
     throw new ApiError(409, 'An account with this email already exists');
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const role = 'student';
   const userId = await withTransaction(async (conn) => {
-    const uid = await userModel.create({ email, password_hash: passwordHash, first_name, last_name, role }, conn);
+    const uid = await userModel.create({ email: normalizedEmail, password_hash: passwordHash, first_name, last_name, role }, conn);
     await studentModel.createProfile({
       userId: uid, year_level, course,
       age, grade_level, school, strand, subjects_needed,
@@ -82,7 +89,7 @@ const register = asyncHandler(async (req, res) => {
 
   log(req, 'auth.register', 'user', userId, { role }, userId);
   const token = signToken({ sub: String(userId), role });
-  ok(res, 201, { token, user: { id: userId, email, first_name, last_name, role: ROLE_LABELS[role], role_key: role } }, 'Registration successful');
+  ok(res, 201, { token, user: { id: userId, email: normalizedEmail, first_name, last_name, role: ROLE_LABELS[role], role_key: role } }, 'Registration successful');
 });
 
 async function checkUserAccountStatus(user) {
@@ -121,7 +128,7 @@ const login = asyncHandler(async (req, res) => {
     password: [v.required('password')]
   }, req.body);
 
-  const user = await userModel.findByEmail(email);
+  const user = await userModel.findByEmail(String(email || '').trim().toLowerCase());
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw new ApiError(401, 'Invalid email or password');
   }
@@ -147,7 +154,7 @@ const adminLogin = asyncHandler(async (req, res) => {
     password: [v.required('password')]
   }, req.body);
 
-  const user = await userModel.findByEmail(email);
+  const user = await userModel.findByEmail(String(email || '').trim().toLowerCase());
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     throw new ApiError(401, 'Invalid email or password');
   }
@@ -202,7 +209,8 @@ const forgotPassword = asyncHandler(async (req, res) => {
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000);
 
-  // Store token hash in database
+  // Clear stale unused tokens for this user, then store the fresh one
+  await query('DELETE FROM password_reset_tokens WHERE user_id = ? AND used_at IS NULL', [user.id]);
   await query(
     `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
     [user.id, tokenHash, expiresAt]
@@ -262,14 +270,10 @@ const resetPassword = asyncHandler(async (req, res) => {
   // Hash new password
   const newHash = await bcrypt.hash(password, 10);
 
-  // Update password and mark token as used
+  // Update password and mark token as used (inside the same transaction)
   await withTransaction(async (conn) => {
     await userModel.changePassword(resetToken.user_id, newHash, conn);
-    await query(
-      `UPDATE password_reset_tokens SET used_at = now() WHERE id = ?`,
-      [resetToken.id],
-      conn
-    );
+    await qex(conn, `UPDATE password_reset_tokens SET used_at = now() WHERE id = ?`, [resetToken.id]);
   });
 
   log(req, 'auth.reset_password', 'user', resetToken.user_id, { email: resetToken.email }, resetToken.user_id);

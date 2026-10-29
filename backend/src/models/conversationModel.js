@@ -18,13 +18,17 @@ async function findById(id) {
   const rows = await query(
     `SELECT c.*, c.deleted_by, s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
+            sp.profile_picture AS student_picture,
             CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
+            tp.profile_picture AS tutor_picture,
             st.last_seen_at AS student_last_seen_at,
             tt.last_seen_at AS tutor_last_seen_at
      FROM conversations c
      LEFT JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
      JOIN users tt ON tt.id = c.tutor_id
+     LEFT JOIN student_profiles sp ON sp.user_id = st.id
+     LEFT JOIN tutor_profiles tp ON tp.user_id = tt.id
      WHERE c.id = ?`,
     [id]
   );
@@ -36,7 +40,9 @@ async function listForUser(userId) {
     `SELECT c.id, c.subject_id, c.student_id, c.tutor_id, c.created_at, c.updated_at,
             s.code AS subject_code, s.name AS subject_name,
             CONCAT(st.first_name, ' ', st.last_name) AS student_name,
+            sp.profile_picture AS student_picture,
             CONCAT(tt.first_name, ' ', tt.last_name) AS tutor_name,
+            tp.profile_picture AS tutor_picture,
             st.last_seen_at AS student_last_seen_at,
             tt.last_seen_at AS tutor_last_seen_at,
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id <> ? AND m.is_read = FALSE) AS unread_count,
@@ -45,6 +51,8 @@ async function listForUser(userId) {
      LEFT JOIN subjects s ON s.id = c.subject_id
      JOIN users st ON st.id = c.student_id
      JOIN users tt ON tt.id = c.tutor_id
+     LEFT JOIN student_profiles sp ON sp.user_id = st.id
+     LEFT JOIN tutor_profiles tp ON tp.user_id = tt.id
      WHERE (c.student_id = ? OR c.tutor_id = ?)
        AND (c.deleted_by IS NULL OR c.deleted_by <> ?)
        AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id)

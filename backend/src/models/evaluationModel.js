@@ -23,11 +23,13 @@ async function listReceivedByTutor(tutorId) {
   return query(
     `SELECT e.*, s.subject_id, sub.code AS subject_code, sub.name AS subject_name,
             CONCAT(u.first_name, ' ', u.last_name) AS student_name,
+            sp.profile_picture AS student_picture,
             s.scheduled_start
      FROM evaluations e
      JOIN sessions s ON s.id = e.session_id
      JOIN subjects sub ON sub.id = s.subject_id
      JOIN users u ON u.id = e.student_id
+     LEFT JOIN student_profiles sp ON sp.user_id = e.student_id
      WHERE e.tutor_id = ?
      ORDER BY e.created_at DESC`,
     [tutorId]
@@ -62,11 +64,15 @@ async function listAll() {
   return query(
     `SELECT e.*, sub.name AS subject_name,
             CONCAT(ts.first_name, ' ', ts.last_name) AS tutor_name,
-            CONCAT(su.first_name, ' ', su.last_name) AS student_name
+            tpf.profile_picture AS tutor_picture,
+            CONCAT(su.first_name, ' ', su.last_name) AS student_name,
+            spf.profile_picture AS student_picture
      FROM evaluations e
      JOIN subjects sub ON sub.id = (SELECT s.subject_id FROM sessions s WHERE s.id = e.session_id)
      JOIN users ts ON ts.id = e.tutor_id
      JOIN users su ON su.id = e.student_id
+     LEFT JOIN tutor_profiles tpf ON tpf.user_id = e.tutor_id
+     LEFT JOIN student_profiles spf ON spf.user_id = e.student_id
      ORDER BY e.created_at DESC`
   );
 }
