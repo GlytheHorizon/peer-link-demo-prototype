@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS user_warnings;
 DROP TABLE IF EXISTS user_reports;
 DROP TABLE IF EXISTS password_reset_tokens;
 DROP TABLE IF EXISTS activity_logs;
+DROP TABLE IF EXISTS user_payment_methods;
 DROP TABLE IF EXISTS conversation_payments;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS reschedule_requests;
@@ -54,18 +55,18 @@ CREATE TABLE users (
   last_seen_at        DATETIME NULL,
   created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  -- Stripe customer this user's saved cards are attached to
+  stripe_customer_id  VARCHAR(50) NULL,
+  -- Payout account a tutor's earnings are sent to
+  payout_account_number VARCHAR(34) NULL,
+  payout_account_name   VARCHAR(120) NULL,
+  payout_updated_at     DATETIME NULL,
   UNIQUE KEY uq_users_email (email),
   KEY idx_users_role (role),
   KEY idx_users_stripe_customer (stripe_customer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Stripe customer + saved payment methods
-ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(50) NULL AFTER updated_at;
-
--- Payout account a tutor's earnings are sent to
-ALTER TABLE users ADD COLUMN payout_account_number VARCHAR(34) NULL AFTER stripe_customer_id;
-ALTER TABLE users ADD COLUMN payout_account_name VARCHAR(120) NULL AFTER payout_account_number;
-ALTER TABLE users ADD COLUMN payout_updated_at DATETIME NULL AFTER payout_account_name;
+-- Saved payment methods (cards) per user
 
 CREATE TABLE user_payment_methods (
   id               BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -246,6 +247,7 @@ CREATE TABLE sessions (
   conversation_id BIGINT NULL,
   status          ENUM('pending','accepted','rejected','cancelled','completed') NOT NULL DEFAULT 'pending',
   learning_mode   VARCHAR(20) NULL,
+  jitsi_room_name VARCHAR(100) NULL,
   scheduled_start DATETIME NOT NULL,
   scheduled_end   DATETIME NOT NULL,
   topic           VARCHAR(255) NULL,

@@ -20,6 +20,7 @@ TRUNCATE TABLE activity_logs;
 TRUNCATE TABLE user_warnings;
 TRUNCATE TABLE user_reports;
 TRUNCATE TABLE password_reset_tokens;
+TRUNCATE TABLE user_payment_methods;
 TRUNCATE TABLE conversation_payments;
 TRUNCATE TABLE payments;
 TRUNCATE TABLE reschedule_requests;

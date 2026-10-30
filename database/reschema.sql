@@ -33,6 +33,7 @@ CALL AddColumnIfNotExists('messages', 'is_system', 'TINYINT(1) NOT NULL DEFAULT 
 CALL AddColumnIfNotExists('sessions', 'student_complete_confirmed_at', 'DATETIME NULL');
 CALL AddColumnIfNotExists('sessions', 'tutor_complete_confirmed_at', 'DATETIME NULL');
 CALL AddColumnIfNotExists('sessions', 'learning_mode', 'VARCHAR(20) NULL');
+CALL AddColumnIfNotExists('sessions', 'jitsi_room_name', 'VARCHAR(100) NULL');
 CALL AddColumnIfNotExists('conversation_payments', 'session_id', 'BIGINT NULL');
 CALL AddColumnIfNotExists('conversation_payments', 'reject_reason', 'VARCHAR(300) NULL');
 CALL AddColumnIfNotExists('tutor_profiles', 'verification_status', "ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending'");
