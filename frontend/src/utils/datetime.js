@@ -32,9 +32,12 @@ export const fmtDateTime = (d) => asDate(d).toLocaleString('en-PH', { dateStyle:
 /** Date-only label, e.g. "Oct 30, 2026". */
 export const fmtDate = (d) => asDate(d).toLocaleDateString('en-PH', { dateStyle: 'medium' });
 
-/** "Today" / "Tomorrow" / weekday label for a date. */
+/** "Today" / "Tomorrow" / weekday label for a date.
+ *  Clones the date first: callers often format the same Date right after this
+ *  (e.g. `dayTag(start) · fmtRange(start, end)`), and zeroing the time on the
+ *  caller's object made every one of those render "12:00 AM". */
 export const dayTag = (d) => {
-  const day = asDate(d);
+  const day = new Date(asDate(d).getTime());
   day.setHours(0, 0, 0, 0);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
